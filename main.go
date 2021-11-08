@@ -10,11 +10,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const TABLEPRIMARY string = "100012"
+const TABLEMIDDLE string = "200012"
+const TABLEADVANCED string = "300012"
+
 var done chan interface{}
 var interrupt chan os.Signal
 var rcvMessage struct {
-	TableID  string `json:"tableID"`
+	TableID  int    `json:"tableID"`
 	UserID   string `json:"userID"`
+	SeatID   int    `json:"seatID"`
 	ConnType string `json:"connType"`
 	Status   string `json:"status"`
 	Betvol   int    `json:"betvol"`
@@ -22,6 +27,12 @@ var rcvMessage struct {
 }
 
 func receiveJsonHandler(connection *websocket.Conn) {
+	//var TablesUserMap []map[string]int
+	//var TablesUserMap []map[string]int
+	TablesUserMap := make([]map[string]int, 3)
+	TablesUserMap[0] = make(map[string]int, 9)
+	TablesUserMap[1] = make(map[string]int, 9)
+	TablesUserMap[2] = make(map[string]int, 9)
 
 	defer close(done)
 	for {
@@ -31,9 +42,17 @@ func receiveJsonHandler(connection *websocket.Conn) {
 			log.Println("Received not JSON data")
 			continue
 		}
-		log.Println(rcvMessage)
-		log.Println("Received TableID:", rcvMessage.TableID)
-		log.Println("Received UserID:", rcvMessage.UserID)
+		// monitor the number of players on a specific table
+		if rcvMessage.TableID < 3 {
+			if rcvMessage.ConnType == "CLOSE" {
+				delete(TablesUserMap[rcvMessage.TableID], rcvMessage.UserID)
+			} else {
+				TablesUserMap[rcvMessage.TableID][rcvMessage.UserID] = rcvMessage.SeatID
+			}
+			log.Println(TablesUserMap)
+		} else {
+			log.Println("not TableID < 2, invalid TableID", rcvMessage.TableID)
+		}
 
 	}
 }
@@ -70,9 +89,9 @@ func main() {
 	// We send our relevant packets here
 	for {
 		select {
-		case <-time.After(time.Duration(1) * time.Millisecond * 3000):
+		case <-time.After(time.Duration(1) * time.Millisecond * 50000):
 			// Send an echo packet every second
-			err := conn.WriteMessage(websocket.TextMessage, []byte("Hello from Golang ws client!"))
+			err := conn.WriteMessage(websocket.TextMessage, []byte("Test message from Golang ws client every 50 secs"))
 			if err != nil {
 				log.Println("Error during writing to websocket:", err)
 				return
