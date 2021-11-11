@@ -91,6 +91,7 @@ func main() {
 
 func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 	var t [VOL_TABLE_MAX]*time.Timer
+	delayAuto := 6 * time.Second
 
 	TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
 	for i := 0; i < VOL_TABLE_MAX; i++ {
@@ -101,24 +102,29 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 	for {
 		select {
 		case rcv := <-ch:
-			fmt.Println("TableID", rcv.TableID, "UserID", rcv.UserID, "connType", rcv.ConnType)
+			fmt.Println("TableID", rcv.TableID, "UserID", rcv.UserID, "connType", rcv.ConnType, "status", rcv.Status)
 			if rcv.ConnType == "CLOSE" {
 				delete(TablesUsersMaps[rcv.TableID], rcv.UserID)
 			} else {
 				TablesUsersMaps[rcv.TableID][rcv.UserID] = rcv.SeatID
 			}
 			log.Println(TablesUsersMaps)
-			t[rcv.TableID].Reset(delay)
+			if rcv.Status == "AUTO" {
+				t[rcv.TableID].Reset(delayAuto)
+				fmt.Println("Set dealy for ATUO", delayAuto)
+			} else {
+				t[rcv.TableID].Reset(delay)
+			}
 			continue
 		case <-t[0].C:
 			fmt.Println("T1 no new player message, repeat time interval:", delay)
 			t[0].Reset(delay)
 		case <-t[1].C:
 			fmt.Println("T2 no new player message, repeat time interval:", delay)
-			t[1].Reset(delay)
+			// t[1].Reset(delay)
 		case <-t[2].C:
 			fmt.Println("T3 no new player message, repeat time interval:", delay)
-			t[2].Reset(delay)
+			// t[2].Reset(delay)
 		}
 	}
 }
