@@ -90,15 +90,13 @@ func main() {
 }
 
 func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
+	var t [VOL_TABLE_MAX]*time.Timer
 
 	TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
 	for i := 0; i < VOL_TABLE_MAX; i++ {
 		TablesUsersMaps[i] = make(map[string]int, TABLE_PLAYERS_MAX)
+		t[i] = time.NewTimer(delay)
 	}
-
-	t0 := time.NewTimer(delay)
-	t1 := time.NewTimer(delay)
-	t2 := time.NewTimer(delay)
 
 	for {
 		select {
@@ -110,26 +108,17 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 				TablesUsersMaps[rcv.TableID][rcv.UserID] = rcv.SeatID
 			}
 			log.Println(TablesUsersMaps)
-			switch rcv.TableID {
-			case 0:
-				t0.Reset(delay)
-			case 1:
-				t1.Reset(delay)
-			case 2:
-				t2.Reset(delay)
-			default:
-				fmt.Println("Invalid TableID", rcv.TableID)
-			}
+			t[rcv.TableID].Reset(delay)
 			continue
-		case <-t0.C:
+		case <-t[0].C:
 			fmt.Println("T1 no new player message, repeat time interval:", delay)
-			t0.Reset(delay)
-		case <-t1.C:
+			t[0].Reset(delay)
+		case <-t[1].C:
 			fmt.Println("T2 no new player message, repeat time interval:", delay)
-			t1.Reset(delay)
-		case <-t2.C:
+			t[1].Reset(delay)
+		case <-t[2].C:
 			fmt.Println("T3 no new player message, repeat time interval:", delay)
-			t2.Reset(delay)
+			t[2].Reset(delay)
 		}
 	}
 }
