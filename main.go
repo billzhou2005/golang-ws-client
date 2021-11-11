@@ -2,6 +2,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -10,51 +11,20 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const TABLEPRIMARY string = "100012"
-const TABLEMIDDLE string = "200012"
-const TABLEADVANCED string = "300012"
+const VOL_TABLE_MAX int = 3
+const TABLE_PLAYERS_MAX int = 9
 
 var done chan interface{}
 var interrupt chan os.Signal
-var rcvMessage struct {
+
+type rcvMessage struct {
 	TableID  int    `json:"tableID"`
-	UserID   string `json:"userID"`
-	SeatID   int    `json:"seatID"`
 	ConnType string `json:"connType"`
 	Status   string `json:"status"`
+	UserID   string `json:"userID"`
+	SeatID   int    `json:"seatID"`
 	Betvol   int    `json:"betvol"`
 	Greeting string `json:"greeting"`
-}
-
-func receiveJsonHandler(connection *websocket.Conn) {
-	//var TablesUserMap []map[string]int
-	//var TablesUserMap []map[string]int
-	TablesUserMap := make([]map[string]int, 3)
-	TablesUserMap[0] = make(map[string]int, 9)
-	TablesUserMap[1] = make(map[string]int, 9)
-	TablesUserMap[2] = make(map[string]int, 9)
-
-	defer close(done)
-	for {
-
-		err := connection.ReadJSON(&rcvMessage)
-		if err != nil {
-			log.Println("Received not JSON data")
-			continue
-		}
-		// monitor the number of players on a specific table
-		if rcvMessage.TableID < 3 {
-			if rcvMessage.ConnType == "CLOSE" {
-				delete(TablesUserMap[rcvMessage.TableID], rcvMessage.UserID)
-			} else {
-				TablesUserMap[rcvMessage.TableID][rcvMessage.UserID] = rcvMessage.SeatID
-			}
-			log.Println(TablesUserMap)
-		} else {
-			log.Println("not TableID < 2, invalid TableID", rcvMessage.TableID)
-		}
-
-	}
 }
 
 /*
@@ -89,9 +59,9 @@ func main() {
 	// We send our relevant packets here
 	for {
 		select {
-		case <-time.After(time.Duration(1) * time.Millisecond * 50000):
+		case <-time.After(time.Duration(1) * time.Second * 60):
 			// Send an echo packet every second
-			err := conn.WriteMessage(websocket.TextMessage, []byte("Test message from Golang ws client every 50 secs"))
+			err := conn.WriteMessage(websocket.TextMessage, []byte("Test message from Golang ws client every 60 secs"))
 			if err != nil {
 				log.Println("Error during writing to websocket:", err)
 				return
@@ -116,5 +86,69 @@ func main() {
 			}
 			return
 		}
+	}
+}
+
+func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
+
+	TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
+	for i := 0; i < VOL_TABLE_MAX; i++ {
+		TablesUsersMaps[i] = make(map[string]int, TABLE_PLAYERS_MAX)
+	}
+
+	t0 := time.NewTimer(delay)
+	t1 := time.NewTimer(delay)
+	t2 := time.NewTimer(delay)
+
+	for {
+		select {
+		case rcv := <-ch:
+			fmt.Println("TableID", rcv.TableID, "UserID", rcv.UserID, "connType", rcv.ConnType)
+			if rcv.ConnType == "CLOSE" {
+				delete(TablesUsersMaps[rcv.TableID], rcv.UserID)
+			} else {
+				TablesUsersMaps[rcv.TableID][rcv.UserID] = rcv.SeatID
+			}
+			log.Println(TablesUsersMaps)
+			switch rcv.TableID {
+			case 0:
+				t0.Reset(delay)
+			case 1:
+				t1.Reset(delay)
+			case 2:
+				t2.Reset(delay)
+			default:
+				fmt.Println("Invalid TableID", rcv.TableID)
+			}
+			continue
+		case <-t0.C:
+			fmt.Println("T1 no new player message, repeat time interval:", delay)
+			t0.Reset(delay)
+		case <-t1.C:
+			fmt.Println("T2 no new player message, repeat time interval:", delay)
+			t1.Reset(delay)
+		case <-t2.C:
+			fmt.Println("T3 no new player message, repeat time interval:", delay)
+			t2.Reset(delay)
+		}
+	}
+}
+
+func receiveJsonHandler(connection *websocket.Conn) {
+	var rcv rcvMessage
+	ch := make(chan rcvMessage)
+
+	defer close(done)
+
+	delay := 12 * time.Second
+	go tableInfoDevlivery(delay, ch)
+
+	for {
+		err := connection.ReadJSON(&rcv)
+		if err != nil {
+			log.Println("Received test message every 60s")
+			continue
+		}
+		ch <- rcv
 	}
 }
