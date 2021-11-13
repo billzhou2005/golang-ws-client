@@ -152,7 +152,7 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 			// save the users info of the specific table
 			TableUsers[rcv.TableID][rcv.SeatID] = rcv
 
-			fmt.Println("TableID", rcv.TableID, "UserID", rcv.UserID, "status", rcv.Status, "connType", rcv.ConnType, "seatID", rcv.SeatID)
+			fmt.Println(rcv, "--Received Msg")
 			// fmt.Println(TableUsers)
 			nextPlayerMsg = createNextPlayerMsg(TableUsers[rcv.TableID], rcv.SeatID)
 
@@ -164,8 +164,7 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 			}
 			continue
 		case <-t[0].C:
-			fmt.Println("T1 Timer trigger")
-			fmt.Println(nextPlayerMsg, "next player info")
+			fmt.Println(nextPlayerMsg, "--T1 Timer trigger Send Msg-next player")
 			if nextPlayerMsg.Status == "AUTO" {
 				sendChan <- nextPlayerMsg
 			}
