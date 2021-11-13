@@ -16,15 +16,18 @@ const TABLE_PLAYERS_MAX int = 9
 
 var done chan interface{}
 var interrupt chan os.Signal
+var sendChan chan rcvMessage
 
 type rcvMessage struct {
-	TableID  int    `json:"tableID"`
-	ConnType string `json:"connType"`
-	Status   string `json:"status"`
-	UserID   string `json:"userID"`
-	SeatID   int    `json:"seatID"`
-	Betvol   int    `json:"betvol"`
-	Greeting string `json:"greeting"`
+	TableID     int    `json:"tableID"`
+	UserID      string `json:"userID"`
+	Status      string `json:"status"` //system auto flag
+	ConnType    string `json:"connType"`
+	IsActivated bool   `json:"isActivated"`
+	Round       int    `json:"round"`
+	SeatID      int    `json:"seatID"`
+	Betvol      int    `json:"betvol"`
+	Greeting    string `json:"greeting"`
 }
 
 /*
@@ -44,6 +47,7 @@ func main() {
 
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
+	sendChan = make(chan rcvMessage)
 
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
@@ -59,13 +63,20 @@ func main() {
 	// We send our relevant packets here
 	for {
 		select {
-		case <-time.After(time.Duration(1) * time.Second * 60):
-			// Send an echo packet every second
-			err := conn.WriteMessage(websocket.TextMessage, []byte("Test message from Golang ws client every 60 secs"))
+		// case <-time.After(time.Duration(1) * time.Second * 60):
+		case sendMsg := <-sendChan:
+
+			// Send an next player packet if needed
+			err := conn.WriteJSON(sendMsg)
 			if err != nil {
-				log.Println("Error during writing to websocket:", err)
+				log.Println("Error during writing the json data to websocket:", err)
 				return
 			}
+			// err := conn.WriteMessage(websocket.TextMessage, []byte("Test message from Golang ws client every 60 secs"))
+			// if err != nil {
+			//	log.Println("Error during writing to websocket:", err)
+			//	return
+			// }
 
 		case <-interrupt:
 			// We received a SIGINT (Ctrl + C). Terminate gracefully...
@@ -89,35 +100,75 @@ func main() {
 	}
 }
 
+// connType: NONE,JOINED,WAITING,ACTIVATE,BNEXT,TIMEOUT,CLOSE
+// Create Next player info for sending
+func createNextPlayerMsg(usersMsg [9]rcvMessage, seatID int) rcvMessage {
+	var seatIDNext int
+	var nextPlayerMsg rcvMessage
+
+	i := seatID
+
+	for {
+		i++
+		if i == TABLE_PLAYERS_MAX {
+			i = 0
+		}
+
+		if usersMsg[i].ConnType == "" || usersMsg[i].ConnType == "NONE" {
+			continue
+		} else if i == seatID || usersMsg[i].ConnType != "" {
+			seatIDNext = i
+			break
+		}
+	}
+
+	// fmt.Println("seatIDNext", seatIDNext)
+	nextPlayerMsg = usersMsg[seatIDNext]
+	nextPlayerMsg.IsActivated = true
+	if nextPlayerMsg.Status == "AUTO" {
+		nextPlayerMsg.ConnType = "BNEXT"
+		nextPlayerMsg.Greeting = "Hello"
+		nextPlayerMsg.IsActivated = false
+	}
+
+	return nextPlayerMsg
+}
+
 func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 	var t [VOL_TABLE_MAX]*time.Timer
 	delayAuto := 6 * time.Second
+	var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
+	var nextPlayerMsg rcvMessage
 
-	TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
+	// TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
 	for i := 0; i < VOL_TABLE_MAX; i++ {
-		TablesUsersMaps[i] = make(map[string]int, TABLE_PLAYERS_MAX)
+		// TablesUsersMaps[i] = make(map[string]int, TABLE_PLAYERS_MAX)
 		t[i] = time.NewTimer(delay)
 	}
 
 	for {
 		select {
 		case rcv := <-ch:
-			fmt.Println("TableID", rcv.TableID, "UserID", rcv.UserID, "connType", rcv.ConnType, "status", rcv.Status)
-			if rcv.ConnType == "CLOSE" {
-				delete(TablesUsersMaps[rcv.TableID], rcv.UserID)
-			} else {
-				TablesUsersMaps[rcv.TableID][rcv.UserID] = rcv.SeatID
-			}
-			log.Println(TablesUsersMaps)
-			if rcv.Status == "AUTO" {
+			// save the users info of the specific table
+			TableUsers[rcv.TableID][rcv.SeatID] = rcv
+
+			fmt.Println("TableID", rcv.TableID, "UserID", rcv.UserID, "status", rcv.Status, "connType", rcv.ConnType, "seatID", rcv.SeatID)
+			// fmt.Println(TableUsers)
+			nextPlayerMsg = createNextPlayerMsg(TableUsers[rcv.TableID], rcv.SeatID)
+
+			if nextPlayerMsg.Status == "AUTO" {
 				t[rcv.TableID].Reset(delayAuto)
-				fmt.Println("Set dealy for ATUO", delayAuto)
+				// fmt.Println("Set dealy for ATUO", delayAuto)
 			} else {
 				t[rcv.TableID].Reset(delay)
 			}
 			continue
 		case <-t[0].C:
-			fmt.Println("T1 no new player message, repeat time interval:", delay)
+			fmt.Println("T1 Timer trigger")
+			fmt.Println(nextPlayerMsg, "next player info")
+			if nextPlayerMsg.Status == "AUTO" {
+				sendChan <- nextPlayerMsg
+			}
 			t[0].Reset(delay)
 		case <-t[1].C:
 			fmt.Println("T2 no new player message, repeat time interval:", delay)
@@ -141,7 +192,7 @@ func receiveJsonHandler(connection *websocket.Conn) {
 	for {
 		err := connection.ReadJSON(&rcv)
 		if err != nil {
-			log.Println("Received test message every 60s")
+			log.Println("Received not JSON data!")
 			continue
 		}
 		ch <- rcv
