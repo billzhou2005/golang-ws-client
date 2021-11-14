@@ -1,4 +1,4 @@
-module github.com/billzhou2005/golang-ws-client
+module golang-ws-client
 
 go 1.16
 

@@ -183,6 +183,8 @@ func receiveJsonHandler(connection *websocket.Conn) {
 	var rcv rcvMessage
 	ch := make(chan rcvMessage)
 
+	GetPlayersCards(50000012, 6)
+
 	defer close(done)
 
 	delay := 12 * time.Second
