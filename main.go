@@ -51,6 +51,9 @@ func main() {
 
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
+	players := GetPlayersCards(50000012, 6)
+	fmt.Println(players)
+
 	socketUrl := "ws://140.143.149.188:9080" + "/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(socketUrl, nil)
 	if err != nil {
@@ -182,8 +185,6 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 func receiveJsonHandler(connection *websocket.Conn) {
 	var rcv rcvMessage
 	ch := make(chan rcvMessage)
-
-	GetPlayersCards(50000012, 6)
 
 	defer close(done)
 
