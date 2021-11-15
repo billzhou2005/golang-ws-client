@@ -27,7 +27,42 @@ type rcvMessage struct {
 	Greeting string `json:"greeting"`
 }
 
-/*
+type Player struct {
+	NickName string `json:"nickName"`
+	Sts      string `json:"sts"`
+	SID      int    `json:"sID"`
+	Vol      int    `json:"vol"`
+	Tol      int    `json:"Tol"`
+}
+
+type RoomMsg struct {
+	TID     int       `json:"tID"`
+	SType   string    `json:"sType"`
+	RType   string    `json:"rType"`
+	UsID    int       `json:"usID"`
+	FID     int       `json:"fID"`
+	Res     string    `json:"res"`
+	Players [6]Player `json:"players"`
+}
+type Card struct {
+	Points int `json:"points"`
+	Suits  int `json:"suits"`
+}
+
+type PlayerWithCards struct {
+	Cards [3]Card `json:"cards"`
+}
+
+type RoomMsgWithCards struct {
+	TID              int                `json:"tID"`
+	SType            string             `json:"sType"`
+	RType            string             `json:"rType"`
+	UsID             int                `json:"usID"`
+	FID              int                `json:"fID"`
+	Res              string             `json:"res"`
+	PlayersWithCards [6]PlayerWithCards `json:"playersWithCards"`
+}
+
 func receiveHandler(connection *websocket.Conn) {
 	defer close(done)
 	for {
@@ -37,9 +72,32 @@ func receiveHandler(connection *websocket.Conn) {
 			return
 		}
 		log.Printf("Received: %s\n", msg)
+		fmt.Println(msg)
 	}
 }
-*/
+func receiveJsonHandler(connection *websocket.Conn) {
+	// var rcvMsg map[string]interface{}
+	var roomMsg RoomMsg
+
+	ch := make(chan rcvMessage)
+
+	defer close(done)
+
+	delay := 12 * time.Second
+	go tableInfoDevlivery(delay, ch)
+
+	for {
+		err := connection.ReadJSON(&roomMsg)
+		if err != nil {
+			log.Println("Received test message every 60s or not Json data")
+			continue
+		}
+		log.Println(roomMsg)
+
+		// log.Println(ei.N(rcv).M("connType").StringZ())
+		// ch <- rcv
+	}
+}
 func main() {
 
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
@@ -53,6 +111,7 @@ func main() {
 		log.Fatal("Error connecting to Websocket Server:", err)
 	}
 	defer conn.Close()
+	// go receiveHandler(conn)
 	go receiveJsonHandler(conn)
 
 	// Our main loop for the client
@@ -120,24 +179,5 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 			fmt.Println("T3 no new player message, repeat time interval:", delay)
 			t[2].Reset(delay)
 		}
-	}
-}
-
-func receiveJsonHandler(connection *websocket.Conn) {
-	var rcv rcvMessage
-	ch := make(chan rcvMessage)
-
-	defer close(done)
-
-	delay := 12 * time.Second
-	go tableInfoDevlivery(delay, ch)
-
-	for {
-		err := connection.ReadJSON(&rcv)
-		if err != nil {
-			log.Println("Received test message every 60s")
-			continue
-		}
-		ch <- rcv
 	}
 }
