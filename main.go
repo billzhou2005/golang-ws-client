@@ -30,7 +30,20 @@ type rcvMessage struct {
 	Greeting    string `json:"greeting"`
 }
 
-/*
+type RoomMsg struct {
+	TID         int       `json:"tID"`
+	MsgType     string    `json:"msgType"`
+	MsgID       int       `json:"msgID"`
+	Status      [9]string `json:"status"`
+	UsID        int       `json:"usID"`
+	FID         int       `json:"fID"`
+	NickName    [9]string `json:"nickName"`
+	Bvol        [9]int    `json:"bvol"`
+	Balance     [9]int    `json:"balance"`
+	CardsPoints [27]int   `json:"cardsPoints"`
+	CardsSuits  [27]int   `json:"cardsSuits"`
+}
+
 func receiveHandler(connection *websocket.Conn) {
 	defer close(done)
 	for {
@@ -42,7 +55,7 @@ func receiveHandler(connection *websocket.Conn) {
 		log.Printf("Received: %s\n", msg)
 	}
 }
-*/
+
 func main() {
 
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
@@ -51,15 +64,13 @@ func main() {
 
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
-	players := GetPlayersCards(50000012, 6)
-	fmt.Println(players)
-
 	socketUrl := "ws://140.143.149.188:9080" + "/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(socketUrl, nil)
 	if err != nil {
 		log.Fatal("Error connecting to Websocket Server:", err)
 	}
 	defer conn.Close()
+	// go receiveHandler(conn)
 	go receiveJsonHandler(conn)
 
 	// Our main loop for the client
@@ -137,10 +148,24 @@ func createNextPlayerMsg(usersMsg [9]rcvMessage, seatID int) rcvMessage {
 	return nextPlayerMsg
 }
 
-func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
+func addCardsInfo(roomMsg RoomMsg) RoomMsg {
+	players := GetPlayersCards(50000012, 9)
+	// fmt.Println(players)
+
+	for i := 0; i < 9; i++ {
+		for j := 0; j < 3; j++ {
+			roomMsg.CardsPoints[3*i+j] = players[i].Cards[j].Points
+			roomMsg.CardsSuits[3*i+j] = players[i].Cards[j].Suits
+		}
+	}
+
+	return roomMsg
+}
+
+func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 	var t [VOL_TABLE_MAX]*time.Timer
-	delayAuto := 6 * time.Second
-	var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
+	// delayAuto := 6 * time.Second
+	// var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
 	var nextPlayerMsg rcvMessage
 
 	// TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
@@ -152,19 +177,22 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 	for {
 		select {
 		case rcv := <-ch:
-			// save the users info of the specific table
-			TableUsers[rcv.TableID][rcv.SeatID] = rcv
+			rcv = addCardsInfo(rcv)
+			log.Println("S:", rcv)
+			/*
+				// save the users info of the specific table
+				TableUsers[rcv.TableID][rcv.SeatID] = rcv
 
-			fmt.Println(rcv, "--Received Msg")
-			// fmt.Println(TableUsers)
-			nextPlayerMsg = createNextPlayerMsg(TableUsers[rcv.TableID], rcv.SeatID)
+				fmt.Println(rcv, "--Received Msg")
+				// fmt.Println(TableUsers)
+				nextPlayerMsg = createNextPlayerMsg(TableUsers[rcv.TableID], rcv.SeatID)
 
-			if nextPlayerMsg.Status == "AUTO" {
-				t[rcv.TableID].Reset(delayAuto)
-				// fmt.Println("Set dealy for ATUO", delayAuto)
-			} else {
-				t[rcv.TableID].Reset(delay)
-			}
+				if nextPlayerMsg.Status == "AUTO" {
+					t[rcv.TableID].Reset(delayAuto)
+					// fmt.Println("Set dealy for ATUO", delayAuto)
+				} else {
+					t[rcv.TableID].Reset(delay)
+				} */
 			continue
 		case <-t[0].C:
 			fmt.Println(nextPlayerMsg, "--T1 Timer trigger Send Msg-next player")
@@ -183,8 +211,9 @@ func tableInfoDevlivery(delay time.Duration, ch chan rcvMessage) {
 }
 
 func receiveJsonHandler(connection *websocket.Conn) {
-	var rcv rcvMessage
-	ch := make(chan rcvMessage)
+	// var rcv rcvMessage
+	var roomMsg RoomMsg
+	ch := make(chan RoomMsg)
 
 	defer close(done)
 
@@ -192,11 +221,12 @@ func receiveJsonHandler(connection *websocket.Conn) {
 	go tableInfoDevlivery(delay, ch)
 
 	for {
-		err := connection.ReadJSON(&rcv)
+		err := connection.ReadJSON(&roomMsg)
 		if err != nil {
 			log.Println("Received not JSON data!")
 			continue
 		}
-		ch <- rcv
+		log.Println("R:", roomMsg)
+		ch <- roomMsg
 	}
 }

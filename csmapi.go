@@ -34,7 +34,7 @@ func GetPlayersCards(tableID int, numofp int) [9]Player {
 	//	numofp := 6
 
 	url := baseUrl + opt1 + strconv.Itoa(tableID) + opt2 + strconv.Itoa(numofp)
-	fmt.Println(url)
+	// fmt.Println(url)
 	response, err := http.Get(url)
 	if err != nil {
 		fmt.Print(err.Error())
