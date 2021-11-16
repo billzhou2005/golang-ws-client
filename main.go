@@ -16,7 +16,7 @@ const TABLE_PLAYERS_MAX int = 9
 
 var done chan interface{}
 var interrupt chan os.Signal
-var sendChan chan rcvMessage
+var sendChan chan RoomMsg
 
 type rcvMessage struct {
 	TableID     int    `json:"tableID"`
@@ -60,7 +60,7 @@ func main() {
 
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
-	sendChan = make(chan rcvMessage)
+	sendChan = make(chan RoomMsg)
 
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
@@ -166,7 +166,8 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 	var t [VOL_TABLE_MAX]*time.Timer
 	// delayAuto := 6 * time.Second
 	// var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
-	var nextPlayerMsg rcvMessage
+	// var nextPlayerMsg rcvMessage
+	var nextPlayerMsg RoomMsg
 
 	// TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
 	for i := 0; i < VOL_TABLE_MAX; i++ {
@@ -179,6 +180,11 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 		case rcv := <-ch:
 			rcv = addCardsInfo(rcv)
 			log.Println("S:", rcv)
+			nextPlayerMsg = rcv
+			nextPlayerMsg.MsgID = 2
+			nextPlayerMsg.Status[nextPlayerMsg.MsgID] = "AUTO"
+			t[rcv.TID].Reset(delay)
+
 			/*
 				// save the users info of the specific table
 				TableUsers[rcv.TableID][rcv.SeatID] = rcv
@@ -195,8 +201,8 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 				} */
 			continue
 		case <-t[0].C:
-			fmt.Println(nextPlayerMsg, "--T1 Timer trigger Send Msg-next player")
-			if nextPlayerMsg.Status == "AUTO" {
+			log.Println("T0S:", nextPlayerMsg)
+			if nextPlayerMsg.Status[nextPlayerMsg.MsgID] == "AUTO" {
 				sendChan <- nextPlayerMsg
 			}
 			t[0].Reset(delay)
