@@ -18,6 +18,7 @@ var done chan interface{}
 var interrupt chan os.Signal
 var sendChan chan RoomMsg
 
+/*
 type rcvMessage struct {
 	TableID     int    `json:"tableID"`
 	UserID      string `json:"userID"`
@@ -28,22 +29,25 @@ type rcvMessage struct {
 	SeatID      int    `json:"seatID"`
 	Betvol      int    `json:"betvol"`
 	Greeting    string `json:"greeting"`
-}
+} */
 
 type RoomMsg struct {
-	TID         int       `json:"tID"`
-	MsgType     string    `json:"msgType"`
-	MsgID       int       `json:"msgID"`
-	Status      [9]string `json:"status"`
-	UsID        int       `json:"usID"`
-	FID         int       `json:"fID"`
-	NickName    [9]string `json:"nickName"`
-	Bvol        [9]int    `json:"bvol"`
-	Balance     [9]int    `json:"balance"`
-	CardsPoints [27]int   `json:"cardsPoints"`
-	CardsSuits  [27]int   `json:"cardsSuits"`
+	TID      int       `json:"tID"`
+	Name     string    `json:"name"`
+	MsgType  string    `json:"msgType"`
+	SeatID   int       `json:"seatID"`
+	Bvol     int       `json:"bvol"`
+	Balance  int       `json:"balance"`
+	FID      int       `json:"fID"`
+	Status   [9]string `json:"status"`
+	Types    [9]string `json:"tpyes"`
+	Names    [9]string `json:"names"`
+	Balances [9]int    `json:"balances"`
+	//	CardsPoints [27]int   `json:"cardsPoints"`
+	//	CardsSuits  [27]int   `json:"cardsSuits"`
 }
 
+/*
 func receiveHandler(connection *websocket.Conn) {
 	defer close(done)
 	for {
@@ -54,7 +58,7 @@ func receiveHandler(connection *websocket.Conn) {
 		}
 		log.Printf("Received: %s\n", msg)
 	}
-}
+} */
 
 func main() {
 
@@ -114,11 +118,12 @@ func main() {
 	}
 }
 
+/*
 // connType: NONE,JOINED,WAITING,ACTIVATE,BNEXT,TIMEOUT,CLOSE
 // Create Next player info for sending
-func createNextPlayerMsg(usersMsg [9]rcvMessage, seatID int) rcvMessage {
+func createNextPlayerMsg(roomMsg [9]RoomMsg, seatID int) RoomMsg {
 	var seatIDNext int
-	var nextPlayerMsg rcvMessage
+	var nextPlayerMsg RoomMsg
 
 	i := seatID
 
@@ -128,16 +133,16 @@ func createNextPlayerMsg(usersMsg [9]rcvMessage, seatID int) rcvMessage {
 			i = 0
 		}
 
-		if usersMsg[i].ConnType == "" || usersMsg[i].ConnType == "NONE" {
+		if roomMsg[i].ConnType == "" || roomMsg[i].ConnType == "NONE" {
 			continue
-		} else if i == seatID || usersMsg[i].ConnType != "" {
+		} else if i == seatID || roomMsg[i].ConnType != "" {
 			seatIDNext = i
 			break
 		}
 	}
 
 	// fmt.Println("seatIDNext", seatIDNext)
-	nextPlayerMsg = usersMsg[seatIDNext]
+	nextPlayerMsg = roomMsg[seatIDNext]
 	nextPlayerMsg.IsActivated = true
 	if nextPlayerMsg.Status == "AUTO" {
 		nextPlayerMsg.ConnType = "BNEXT"
@@ -147,10 +152,13 @@ func createNextPlayerMsg(usersMsg [9]rcvMessage, seatID int) rcvMessage {
 
 	return nextPlayerMsg
 }
+*/
 
+/*
 func addCardsInfo(roomMsg RoomMsg) RoomMsg {
-	players := GetPlayersCards(50000012, 9)
+	players := util.GetPlayersCards(50000012, 9)
 	// fmt.Println(players)
+
 
 	for i := 0; i < 9; i++ {
 		for j := 0; j < 3; j++ {
@@ -161,6 +169,7 @@ func addCardsInfo(roomMsg RoomMsg) RoomMsg {
 
 	return roomMsg
 }
+*/
 
 func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 	var t [VOL_TABLE_MAX]*time.Timer
@@ -178,11 +187,12 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 	for {
 		select {
 		case rcv := <-ch:
-			rcv = addCardsInfo(rcv)
+			// rcv = addCardsInfo(rcv)
 			log.Println("S:", rcv)
 			nextPlayerMsg = rcv
-			nextPlayerMsg.MsgID = 2
-			nextPlayerMsg.Status[nextPlayerMsg.MsgID] = "AUTO"
+
+			nextPlayerMsg.SeatID = 1
+			nextPlayerMsg.Status[nextPlayerMsg.SeatID] = "AUTO"
 			t[rcv.TID].Reset(delay)
 
 			/*
@@ -202,7 +212,8 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 			continue
 		case <-t[0].C:
 			log.Println("T0S:", nextPlayerMsg)
-			if nextPlayerMsg.Status[nextPlayerMsg.MsgID] == "AUTO" {
+			// log.Println(nextPlayerMsg.Status[nextPlayerMsg.SeatID])
+			if nextPlayerMsg.Status[nextPlayerMsg.SeatID] == "AUTO" {
 				sendChan <- nextPlayerMsg
 			}
 			t[0].Reset(delay)
