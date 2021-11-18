@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -16,7 +17,7 @@ const TABLE_PLAYERS_MAX int = 9
 
 var done chan interface{}
 var interrupt chan os.Signal
-var sendChan chan RoomMsg
+var sendChan chan map[string]interface{}
 
 /*
 type rcvMessage struct {
@@ -43,8 +44,11 @@ type RoomMsg struct {
 	Types    [9]string `json:"tpyes"`
 	Names    [9]string `json:"names"`
 	Balances [9]int    `json:"balances"`
-	//	CardsPoints [27]int   `json:"cardsPoints"`
-	//	CardsSuits  [27]int   `json:"cardsSuits"`
+}
+
+type Cards struct {
+	CardsPoints [27]int `json:"cardsPoints"`
+	CardsSuits  [27]int `json:"cardsSuits"`
 }
 
 /*
@@ -64,7 +68,7 @@ func main() {
 
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
-	sendChan = make(chan RoomMsg)
+	sendChan = make(chan map[string]interface{})
 
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
@@ -171,12 +175,22 @@ func addCardsInfo(roomMsg RoomMsg) RoomMsg {
 }
 */
 
-func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
+func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 	var t [VOL_TABLE_MAX]*time.Timer
 	// delayAuto := 6 * time.Second
 	// var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
 	// var nextPlayerMsg rcvMessage
-	var nextPlayerMsg RoomMsg
+	// var nextPlayerMsg RoomMsg
+	var cards Cards
+
+	cardsMap := make(map[string]interface{})
+
+	// testIndex := 0
+
+	for i := 0; i < 27; i++ {
+		cards.CardsPoints[i] = i
+		cards.CardsSuits[i] = i
+	}
 
 	// TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
 	for i := 0; i < VOL_TABLE_MAX; i++ {
@@ -189,11 +203,16 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 		case rcv := <-ch:
 			// rcv = addCardsInfo(rcv)
 			log.Println("S:", rcv)
-			nextPlayerMsg = rcv
+			for k := range rcv {
+				delete(rcv, k)
+			}
+			t[0].Reset(delay)
+			/*nextPlayerMsg = rcv
 
 			nextPlayerMsg.SeatID = 1
 			nextPlayerMsg.Status[nextPlayerMsg.SeatID] = "AUTO"
 			t[rcv.TID].Reset(delay)
+			*/
 
 			/*
 				// save the users info of the specific table
@@ -211,11 +230,18 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 				} */
 			continue
 		case <-t[0].C:
-			log.Println("T0S:", nextPlayerMsg)
+
+			tmp := &cards
+			tmprec, _ := json.Marshal(tmp)
+
+			json.Unmarshal(tmprec, &cardsMap)
+			log.Println("T0S:", cardsMap, cards)
+			sendChan <- cardsMap
 			// log.Println(nextPlayerMsg.Status[nextPlayerMsg.SeatID])
-			if nextPlayerMsg.Status[nextPlayerMsg.SeatID] == "AUTO" {
-				sendChan <- nextPlayerMsg
-			}
+			/*
+				if nextPlayerMsg.Status[nextPlayerMsg.SeatID] == "AUTO" {
+					sendChan <- nextPlayerMsg
+				} */
 			t[0].Reset(delay)
 		case <-t[1].C:
 			fmt.Println("T2 no new player message, repeat time interval:", delay)
@@ -228,9 +254,10 @@ func tableInfoDevlivery(delay time.Duration, ch chan RoomMsg) {
 }
 
 func receiveJsonHandler(connection *websocket.Conn) {
-	// var rcv rcvMessage
-	var roomMsg RoomMsg
-	ch := make(chan RoomMsg)
+	var rcvMsg map[string]interface{}
+
+	//var roomMsg RoomMsg
+	ch := make(chan map[string]interface{})
 
 	defer close(done)
 
@@ -238,12 +265,12 @@ func receiveJsonHandler(connection *websocket.Conn) {
 	go tableInfoDevlivery(delay, ch)
 
 	for {
-		err := connection.ReadJSON(&roomMsg)
+		err := connection.ReadJSON(&rcvMsg)
 		if err != nil {
 			log.Println("Received not JSON data!")
 			continue
 		}
-		log.Println("R:", roomMsg)
-		ch <- roomMsg
+		log.Println("R:", rcvMsg)
+		ch <- rcvMsg
 	}
 }
