@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"golang-ws-client/util"
 	"log"
 	"os"
 	"os/signal"
@@ -36,6 +37,7 @@ type RoomMsg struct {
 	TID      int       `json:"tID"`
 	Name     string    `json:"name"`
 	MsgType  string    `json:"msgType"`
+	Type     string    `json:"type"`
 	SeatID   int       `json:"seatID"`
 	Bvol     int       `json:"bvol"`
 	Balance  int       `json:"balance"`
@@ -47,8 +49,9 @@ type RoomMsg struct {
 }
 
 type Cards struct {
-	CardsPoints [27]int `json:"cardsPoints"`
-	CardsSuits  [27]int `json:"cardsSuits"`
+	CardsPoints [27]int   `json:"cardsPoints"`
+	CardsSuits  [27]int   `json:"cardsSuits"`
+	Cardstypes  [9]string `json:"cardstypes"`
 }
 
 /*
@@ -158,34 +161,47 @@ func createNextPlayerMsg(roomMsg [9]RoomMsg, seatID int) RoomMsg {
 }
 */
 
-/*
-func addCardsInfo(roomMsg RoomMsg) RoomMsg {
+func addCardsInfo(cards Cards) Cards {
 	players := util.GetPlayersCards(50000012, 9)
 	// fmt.Println(players)
 
-
 	for i := 0; i < 9; i++ {
+		cards.Cardstypes[i] = players[i].Cardstype
 		for j := 0; j < 3; j++ {
-			roomMsg.CardsPoints[3*i+j] = players[i].Cards[j].Points
-			roomMsg.CardsSuits[3*i+j] = players[i].Cards[j].Suits
+			cards.CardsPoints[3*i+j] = players[i].Cards[j].Points
+			cards.CardsSuits[3*i+j] = players[i].Cards[j].Suits
 		}
 	}
 
-	return roomMsg
+	return cards
 }
-*/
 
 func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 	var t [VOL_TABLE_MAX]*time.Timer
 	// delayAuto := 6 * time.Second
 	// var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
 	// var nextPlayerMsg rcvMessage
-	// var nextPlayerMsg RoomMsg
+	var roomNextMsg RoomMsg
 	var cards Cards
 
-	cardsMap := make(map[string]interface{})
+	sendMap := make(map[string]interface{})
 
-	// testIndex := 0
+	roomNextMsg.TID = 0
+	roomNextMsg.Name = "UNKNOWN"
+	roomNextMsg.MsgType = "NEW"
+	roomNextMsg.Type = "NONE"
+	roomNextMsg.SeatID = 0
+	roomNextMsg.Bvol = 0
+	roomNextMsg.Balance = 0
+	roomNextMsg.FID = 0
+	for i := 0; i < 9; i++ {
+		roomNextMsg.Status[i] = "MANUAL"
+		roomNextMsg.Types[i] = "NONE"
+		roomNextMsg.Names[i] = "UNKNOWN"
+		roomNextMsg.Balances[i] = 0
+	}
+
+	testIndex := 0
 
 	for i := 0; i < 27; i++ {
 		cards.CardsPoints[i] = i
@@ -201,8 +217,27 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 	for {
 		select {
 		case rcv := <-ch:
-			// rcv = addCardsInfo(rcv)
+			testIndex++
+			cards = addCardsInfo(cards)
 			log.Println("S:", rcv)
+			_, isOk := rcv["msgType"]
+			if isOk {
+				arr, err := json.Marshal(rcv)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				err = json.Unmarshal(arr, &roomNextMsg)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+
+			} else {
+				log.Println("msgType not found", roomNextMsg)
+			}
+
+			// clear map
 			for k := range rcv {
 				delete(rcv, k)
 			}
@@ -231,17 +266,28 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 			continue
 		case <-t[0].C:
 
-			tmp := &cards
-			tmprec, _ := json.Marshal(tmp)
+			// delete map before assigned
+			for k := range sendMap {
+				delete(sendMap, k)
+			}
 
-			json.Unmarshal(tmprec, &cardsMap)
-			log.Println("T0S:", cardsMap, cards)
-			sendChan <- cardsMap
+			log.Println("textIndex", testIndex)
+			if testIndex%2 == 0 {
+				tmprec, _ := json.Marshal(&cards)
+				json.Unmarshal(tmprec, &sendMap)
+
+			} else {
+				tmprec, _ := json.Marshal(&roomNextMsg)
+				json.Unmarshal(tmprec, &sendMap)
+			}
+
 			// log.Println(nextPlayerMsg.Status[nextPlayerMsg.SeatID])
 			/*
 				if nextPlayerMsg.Status[nextPlayerMsg.SeatID] == "AUTO" {
 					sendChan <- nextPlayerMsg
 				} */
+			log.Println("T0S:", sendMap)
+			sendChan <- sendMap
 			t[0].Reset(delay)
 		case <-t[1].C:
 			fmt.Println("T2 no new player message, repeat time interval:", delay)
