@@ -65,15 +65,6 @@ type Player struct {
 	Tol      int    `json:"Tol"`
 }
 
-type RoomMsg struct {
-	TID     int       `json:"tID"`
-	SType   string    `json:"sType"`
-	RType   string    `json:"rType"`
-	UsID    int       `json:"usID"`
-	FID     int       `json:"fID"`
-	Res     string    `json:"res"`
-	Players [6]Player `json:"players"`
-}
 type Card struct {
 	Points int `json:"points"`
 	Suits  int `json:"suits"`
@@ -93,6 +84,7 @@ type RoomMsgWithCards struct {
 	PlayersWithCards [6]PlayerWithCards `json:"playersWithCards"`
 }
 
+/*
 func receiveHandler(connection *websocket.Conn) {
 	defer close(done)
 	for {
@@ -104,35 +96,8 @@ func receiveHandler(connection *websocket.Conn) {
 		log.Printf("Received: %s\n", msg)
 		fmt.Println(msg)
 	}
-}
-func receiveJsonHandler(connection *websocket.Conn) {
-	// var rcvMsg map[string]interface{}
-	var roomMsg RoomMsg
-
-	ch := make(chan rcvMessage)
-
-	defer close(done)
-
-	delay := 12 * time.Second
-	go tableInfoDevlivery(delay, ch)
-
-	for {
-		err := connection.ReadJSON(&roomMsg)
-		if err != nil {
-			log.Println("Received test message every 60s or not Json data")
-			continue
-		}
-		log.Println(roomMsg)
-
-		// log.Println(ei.N(rcv).M("connType").StringZ())
-		// ch <- rcv
-	}
-<<<<<<< HEAD
-}
-=======
 } */
 
->>>>>>> d6972a01e97c63df6da4068c043b0596b05a2452
 func main() {
 
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
@@ -413,8 +378,6 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 		}
 	}
 }
-<<<<<<< HEAD
-=======
 
 func msgMapSend(msgMap map[string]interface{}) {
 	sendMap := make(map[string]interface{})
@@ -474,4 +437,3 @@ func generateRandomNumber(start int, end int, count int) []int {
 
 	return nums
 }
->>>>>>> d6972a01e97c63df6da4068c043b0596b05a2452
