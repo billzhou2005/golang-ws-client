@@ -13,8 +13,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const VOL_TABLE_MAX int = 3
-const TABLE_PLAYERS_MAX int = 9
+const VOL_ROOM_MAX int = 3
+const ROOM_PLAYERS_MAX int = 9
 
 var done chan interface{}
 var interrupt chan os.Signal
@@ -43,7 +43,7 @@ type RoomMsg struct {
 	Balance  int       `json:"balance"`
 	FID      int       `json:"fID"`
 	Status   [9]string `json:"status"`
-	Types    [9]string `json:"tpyes"`
+	Types    [9]string `json:"types"`
 	Names    [9]string `json:"names"`
 	Balances [9]int    `json:"balances"`
 }
@@ -128,7 +128,7 @@ func main() {
 /*
 // connType: NONE,JOINED,WAITING,ACTIVATE,BNEXT,TIMEOUT,CLOSE
 // Create Next player info for sending
-func createNextPlayerMsg(roomMsg [9]RoomMsg, seatID int) RoomMsg {
+func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 	var seatIDNext int
 	var nextPlayerMsg RoomMsg
 
@@ -136,7 +136,7 @@ func createNextPlayerMsg(roomMsg [9]RoomMsg, seatID int) RoomMsg {
 
 	for {
 		i++
-		if i == TABLE_PLAYERS_MAX {
+		if i == ROOM_PLAYERS_MAX {
 			i = 0
 		}
 
@@ -165,7 +165,7 @@ func addCardsInfo(cards Cards) Cards {
 	players := util.GetPlayersCards(50000012, 9)
 	// fmt.Println(players)
 
-	for i := 0; i < 9; i++ {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		cards.Cardstypes[i] = players[i].Cardstype
 		for j := 0; j < 3; j++ {
 			cards.CardsPoints[3*i+j] = players[i].Cards[j].Points
@@ -176,43 +176,62 @@ func addCardsInfo(cards Cards) Cards {
 	return cards
 }
 
+func mapToStructRoomMsg(m map[string]interface{}) RoomMsg {
+	var roomMsg RoomMsg
+
+	_, isOk := m["msgType"]
+	if isOk {
+		arr, err := json.Marshal(m)
+		if err != nil {
+			fmt.Println(err)
+			return roomMsg
+		}
+		err = json.Unmarshal(arr, &roomMsg)
+		if err != nil {
+			fmt.Println(err)
+			return roomMsg
+		}
+
+	} else {
+		log.Println("msgType not found, return empty data", roomMsg)
+	}
+
+	return roomMsg
+}
+
 func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
-	var t [VOL_TABLE_MAX]*time.Timer
+	var t [VOL_ROOM_MAX]*time.Timer
 	// delayAuto := 6 * time.Second
-	// var TableUsers [VOL_TABLE_MAX][TABLE_PLAYERS_MAX]rcvMessage
+	var rooms [VOL_ROOM_MAX]RoomMsg
 	// var nextPlayerMsg rcvMessage
 	var roomNextMsg RoomMsg
 	var cards Cards
 
 	sendMap := make(map[string]interface{})
 
-	roomNextMsg.TID = 0
-	roomNextMsg.Name = "UNKNOWN"
-	roomNextMsg.MsgType = "NEW"
-	roomNextMsg.Type = "NONE"
-	roomNextMsg.SeatID = 0
-	roomNextMsg.Bvol = 0
-	roomNextMsg.Balance = 0
-	roomNextMsg.FID = 0
-	for i := 0; i < 9; i++ {
-		roomNextMsg.Status[i] = "MANUAL"
-		roomNextMsg.Types[i] = "NONE"
-		roomNextMsg.Names[i] = "UNKNOWN"
-		roomNextMsg.Balances[i] = 0
-	}
-
 	testIndex := 0
 
-	for i := 0; i < 27; i++ {
-		cards.CardsPoints[i] = i
-		cards.CardsSuits[i] = i
-	}
+	// rooms info init
+	for i := 0; i < VOL_ROOM_MAX; i++ {
 
-	// TablesUsersMaps := make([]map[string]int, VOL_TABLE_MAX)
-	for i := 0; i < VOL_TABLE_MAX; i++ {
-		// TablesUsersMaps[i] = make(map[string]int, TABLE_PLAYERS_MAX)
+		rooms[i].TID = 0
+		rooms[i].Name = "UNKNOWN"
+		rooms[i].MsgType = "NONE"
+		rooms[i].Type = "NONE"
+		rooms[i].SeatID = 0
+		rooms[i].Bvol = 0
+		rooms[i].Balance = 0
+		rooms[i].FID = 0
+		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
+			rooms[i].Status[j] = "MANUAL"
+			rooms[i].Types[j] = "NONE"
+			rooms[i].Names[j] = "UNKNOWN"
+			rooms[i].Balances[j] = 0
+		}
 		t[i] = time.NewTimer(delay)
 	}
+	// roomNextMsg init
+	roomNextMsg = rooms[0]
 
 	for {
 		select {
@@ -220,27 +239,12 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 			testIndex++
 			cards = addCardsInfo(cards)
 			log.Println("S:", rcv)
-			_, isOk := rcv["msgType"]
-			if isOk {
-				arr, err := json.Marshal(rcv)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-				err = json.Unmarshal(arr, &roomNextMsg)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+			rcvMsg := mapToStructRoomMsg(rcv)
 
-			} else {
-				log.Println("msgType not found", roomNextMsg)
+			roomNextMsg = rooms[rcvMsg.TID]
+			if rcvMsg.MsgType == "JOIN" {
 			}
 
-			// clear map
-			for k := range rcv {
-				delete(rcv, k)
-			}
 			t[0].Reset(delay)
 			/*nextPlayerMsg = rcv
 
