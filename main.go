@@ -18,6 +18,8 @@ const VOL_ROOM_MAX int = 3
 const ROOM_PLAYERS_MAX int = 9
 
 var rooms [VOL_ROOM_MAX]RoomMsg
+var cardsDelivery bool
+var msgDelivery bool
 
 var done chan interface{}
 var interrupt chan os.Signal
@@ -54,7 +56,7 @@ type RoomMsg struct {
 type Cards struct {
 	CardsPoints [27]int   `json:"cardsPoints"`
 	CardsSuits  [27]int   `json:"cardsSuits"`
-	Cardstypes  [9]string `json:"cardstypes"`
+	CardsTypes  [9]string `json:"cardsTypes"`
 }
 
 type Player struct {
@@ -104,6 +106,9 @@ func main() {
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
 	sendChan = make(chan map[string]interface{})
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
+
+	cardsDelivery = false
+	msgDelivery = false
 
 	// rooms info init
 	for i := 0; i < VOL_ROOM_MAX; i++ {
@@ -190,13 +195,27 @@ func receiveJsonHandler(connection *websocket.Conn) {
 			log.Println("Received not JSON data!")
 			continue
 		}
-		log.Println("R:", rcvMsg)
-		ch <- rcvMsg
 
-		/* delete map after used
+		roomMsg, cf1 := mapToStructRoomMsg(rcvMsg)
+		cards, cf2 := mapToStructCards(rcvMsg)
+
+		if cf1 {
+			log.Println("R-roomMsg:", roomMsg)
+			ch <- roomMsgStructToMap(roomMsg)
+		}
+		if cf2 {
+			log.Println("R-cards:", cards)
+			ch <- cardsStructToMap(cards)
+		}
+
+		if !cf1 && !cf2 {
+			log.Println("Not roomMsg or cards, invalid message from readJSON")
+		}
+
+		// delete map after used
 		for k := range rcvMsg {
 			delete(rcvMsg, k)
-		} */
+		}
 
 	}
 }
@@ -206,7 +225,7 @@ func addCardsInfo(cards Cards) Cards {
 	// fmt.Println(players)
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		cards.Cardstypes[i] = players[i].Cardstype
+		cards.CardsTypes[i] = players[i].Cardstype
 		for j := 0; j < 3; j++ {
 			cards.CardsPoints[3*i+j] = players[i].Cards[j].Points
 			cards.CardsSuits[3*i+j] = players[i].Cards[j].Suits
@@ -232,11 +251,34 @@ func mapToStructRoomMsg(m map[string]interface{}) (RoomMsg, bool) {
 			return roomMsg, false
 		}
 	} else {
-		log.Println("msgType not found, return empty data")
+		log.Println("RoomMsg struct not found, return empty data")
 		return roomMsg, false
 	}
 
 	return roomMsg, true
+}
+
+func mapToStructCards(m map[string]interface{}) (Cards, bool) {
+	var cards Cards
+
+	_, isOk := m["cardsTypes"]
+	if isOk {
+		arr, err := json.Marshal(m)
+		if err != nil {
+			fmt.Println(err)
+			return cards, false
+		}
+		err = json.Unmarshal(arr, &cards)
+		if err != nil {
+			fmt.Println(err)
+			return cards, false
+		}
+	} else {
+		log.Println("Cards struct not found, return empty data")
+		return cards, false
+	}
+
+	return cards, true
 }
 
 func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
@@ -303,20 +345,44 @@ func assignSeatID(roomMsg RoomMsg) bool {
 	return true
 }
 
-// msgType: JOIN,ASSIGNED,TIMEOUT,CLOSE
+// msgType: JOIN,ASSIGNED,NEWROUND,TIMEOUT,CLOSE
 
-func roomsUpdate(roomMsg RoomMsg) {
+func roomsUpdate(roomMsg RoomMsg) time.Duration {
+	sendDelay := time.Millisecond
 
 	switch roomMsg.MsgType {
 	case "JOIN":
 		rooms[roomMsg.TID] = addAutoPlayers(rooms[roomMsg.TID])
 		isOk := assignSeatID(roomMsg)
+		sendDelay = time.Millisecond
+		msgDelivery = true
 		if !isOk {
 			log.Println("login user assigned seat-failed")
+			sendDelay = 3 * time.Second
 		}
+	case "ASSIGNED":
+		rooms[roomMsg.TID].MsgType = "NEWROUND"
+		sendDelay = 5 * time.Second
+		msgDelivery = true
+	case "NEWROUND":
+		cardsDelivery = true
+		rooms[roomMsg.TID].MsgType = "SETFOCUS"
+		sendDelay = 2 * time.Second
+		msgDelivery = false
+	case "SETFOCUS":
+		rooms[roomMsg.TID].MsgType = "WAITING"
+		sendDelay = 12 * time.Second
+		msgDelivery = true
+	case "WAITING":
+		sendDelay = 12 * time.Second
+		msgDelivery = true
 	default:
 		log.Println("rooms info no need to update")
+		sendDelay = 12 * time.Second
+		msgDelivery = true
 	}
+
+	return sendDelay
 }
 
 func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
@@ -325,10 +391,9 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 	// var nextPlayerMsg rcvMessage
 	var roomNextMsg RoomMsg
 	var cards Cards
+	var sendDelay time.Duration
 
 	sendMap := make(map[string]interface{})
-
-	testIndex := 0
 
 	for i := 0; i < VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -339,33 +404,39 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 	for {
 		select {
 		case rcv := <-ch:
-			// test code
-			testIndex++
-			cards = addCardsInfo(cards)
 
 			rcvMsg, convertFlag := mapToStructRoomMsg(rcv)
 			if convertFlag {
-				roomsUpdate(rcvMsg)
+				sendDelay = roomsUpdate(rcvMsg)
 			}
 
 			roomNextMsg = rooms[rcvMsg.TID]
 
-			t[0].Reset(delay)
+			log.Println("msgDelivery:", msgDelivery, "cardsDelivery:", cardsDelivery, "sendDelay:", sendDelay)
+
+			t[0].Reset(sendDelay)
+
 			continue
 		case <-t[0].C:
+			fmt.Println("T0 response---")
 
 			// delete map before assigned
 			for k := range sendMap {
 				delete(sendMap, k)
 			}
 
-			log.Println("textIndex", testIndex)
-			if testIndex%2 == 0 {
-				msgMapSend(cardsStructToMap(cards))
-				// sendMap = cardsStructToMap(cards)
-			} else {
+			if (!cardsDelivery && !msgDelivery) && roomNextMsg.MsgType == "SETFOCUS" {
 				msgMapSend(roomMsgStructToMap(roomNextMsg))
-				// sendMap = roomMsgStructToMap(roomNextMsg)
+			}
+
+			if cardsDelivery {
+				cards = addCardsInfo(cards)
+				msgMapSend(cardsStructToMap(cards))
+				cardsDelivery = false
+			}
+			if msgDelivery {
+				msgMapSend(roomMsgStructToMap(roomNextMsg))
+				msgDelivery = false
 			}
 
 			t[0].Reset(delay)
