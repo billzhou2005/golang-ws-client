@@ -42,7 +42,7 @@ type RoomMsg struct {
 	TID      int       `json:"tID"`
 	Name     string    `json:"name"`
 	MsgType  string    `json:"msgType"`
-	Type     string    `json:"type"`
+	Reserve  string    `json:"reserve"`
 	SeatID   int       `json:"seatID"`
 	Bvol     int       `json:"bvol"`
 	Balance  int       `json:"balance"`
@@ -115,7 +115,7 @@ func main() {
 		rooms[i].TID = 0
 		rooms[i].Name = "UNKNOWN"
 		rooms[i].MsgType = "NONE"
-		rooms[i].Type = "NONE"
+		rooms[i].Reserve = "TBD"
 		rooms[i].SeatID = 0
 		rooms[i].Bvol = 0
 		rooms[i].Balance = 0
@@ -393,6 +393,7 @@ func roomsUpdate(roomMsg RoomMsg) time.Duration {
 		sendDelay = 1 * time.Second
 		msgDelivery = true
 		rooms[roomMsg.TID] = deleteLeavePlayers(rooms[roomMsg.TID], roomMsg.Name)
+		rooms[roomMsg.TID].MsgType = "WAITING"
 	default:
 		log.Println("rooms info no need to update")
 		sendDelay = 12 * time.Second
