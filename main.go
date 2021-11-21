@@ -289,7 +289,7 @@ func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 
 	numofp = 0
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Names[0] != "UNKNOWN" {
+		if roomMsg.Names[i] != "UNKNOWN" {
 			numofp++
 		}
 	}
@@ -300,6 +300,19 @@ func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 			roomMsg.Status[j] = "AUTO"
 			roomMsg.Types[j] = "ASSIGNED"
 			roomMsg.Balances[j] = 6600000 + randomNums[j]*100000 // add random balance for auto user
+		}
+	}
+
+	return roomMsg
+}
+func deleteLeavePlayers(roomMsg RoomMsg, name string) RoomMsg {
+
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if roomMsg.Names[i] == name {
+			roomMsg.Status[i] = "MANUAL"
+			roomMsg.Types[i] = "NONE"
+			roomMsg.Names[i] = "UNKNOWN"
+			roomMsg.Balances[i] = 0
 		}
 	}
 
@@ -345,7 +358,7 @@ func assignSeatID(roomMsg RoomMsg) bool {
 	return true
 }
 
-// msgType: JOIN,ASSIGNED,NEWROUND,TIMEOUT,CLOSE
+// msgType: JOIN,ASSIGNED,NEWROUND,TIMEOUT,CLOSE, LEAVE
 
 func roomsUpdate(roomMsg RoomMsg) time.Duration {
 	sendDelay := time.Millisecond
@@ -376,6 +389,10 @@ func roomsUpdate(roomMsg RoomMsg) time.Duration {
 	case "WAITING":
 		sendDelay = 12 * time.Second
 		msgDelivery = true
+	case "LEAVE":
+		sendDelay = 1 * time.Second
+		msgDelivery = true
+		rooms[roomMsg.TID] = deleteLeavePlayers(rooms[roomMsg.TID], roomMsg.Name)
 	default:
 		log.Println("rooms info no need to update")
 		sendDelay = 12 * time.Second
@@ -407,6 +424,7 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 
 			rcvMsg, convertFlag := mapToStructRoomMsg(rcv)
 			if convertFlag {
+				log.Println("rcvMsg:", rcvMsg)
 				sendDelay = roomsUpdate(rcvMsg)
 			}
 
