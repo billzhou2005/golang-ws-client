@@ -54,6 +54,8 @@ type RoomMsg struct {
 }
 
 type Cards struct {
+	TID         int       `json:"tID"`
+	CardsName   string    `json:"cardsName"`
 	CardsPoints [27]int   `json:"cardsPoints"`
 	CardsSuits  [27]int   `json:"cardsSuits"`
 	CardsTypes  [9]string `json:"cardsTypes"`
@@ -221,6 +223,8 @@ func receiveJsonHandler(connection *websocket.Conn) {
 }
 
 func addCardsInfo(cards Cards) Cards {
+	cards.CardsName = "jhCards"
+
 	players := util.GetPlayersCards(50000012, 9)
 	// fmt.Println(players)
 
@@ -450,6 +454,7 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 
 			if cardsDelivery {
 				cards = addCardsInfo(cards)
+				cards.TID = 0
 				msgMapSend(cardsStructToMap(cards))
 				cardsDelivery = false
 			}
