@@ -39,18 +39,18 @@ type rcvMessage struct {
 } */
 
 type RoomMsg struct {
-	TID      int       `json:"tID"`
-	Name     string    `json:"name"`
-	MsgType  string    `json:"msgType"`
-	Reserve  string    `json:"reserve"`
-	SeatID   int       `json:"seatID"`
-	Bvol     int       `json:"bvol"`
-	Balance  int       `json:"balance"`
-	FID      int       `json:"fID"`
-	Status   [9]string `json:"status"`
-	Types    [9]string `json:"types"`
-	Names    [9]string `json:"names"`
-	Balances [9]int    `json:"balances"`
+	TID       int       `json:"tID"`
+	Name      string    `json:"name"`
+	MsgType   string    `json:"msgType"`
+	Reserve   string    `json:"reserve"`
+	SeatID    int       `json:"seatID"`
+	Bvol      int       `json:"bvol"`
+	Balance   int       `json:"balance"`
+	FID       int       `json:"fID"`
+	Focus     [9]bool   `json:"focus"`
+	CardsShow [9]bool   `json:"cardsShow"`
+	Names     [9]string `json:"names"`
+	Balances  [9]int    `json:"balances"`
 }
 
 type Cards struct {
@@ -123,8 +123,8 @@ func main() {
 		rooms[i].Balance = 0
 		rooms[i].FID = 0
 		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
-			rooms[i].Status[j] = "MANUAL"
-			rooms[i].Types[j] = "NONE"
+			rooms[i].Focus[j] = false
+			rooms[i].CardsShow[j] = false
 			rooms[i].Names[j] = "UNKNOWN"
 			rooms[i].Balances[j] = 0
 		}
@@ -301,8 +301,8 @@ func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 	if numofp == 0 {
 		for j := 0; j < 3; j++ {
 			roomMsg.Names[j] = nickName[randomNums[j]]
-			roomMsg.Status[j] = "AUTO"
-			roomMsg.Types[j] = "ASSIGNED"
+			roomMsg.Focus[j] = false
+			roomMsg.CardsShow[j] = false
 			roomMsg.Balances[j] = 6600000 + randomNums[j]*100000 // add random balance for auto user
 		}
 	}
@@ -313,8 +313,8 @@ func deleteLeavePlayers(roomMsg RoomMsg, name string) RoomMsg {
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if roomMsg.Names[i] == name {
-			roomMsg.Status[i] = "MANUAL"
-			roomMsg.Types[i] = "NONE"
+			roomMsg.Focus[i] = false
+			roomMsg.CardsShow[i] = false
 			roomMsg.Names[i] = "UNKNOWN"
 			roomMsg.Balances[i] = 0
 		}
@@ -350,8 +350,8 @@ func assignSeatID(roomMsg RoomMsg) bool {
 
 	if seatID < ROOM_PLAYERS_MAX {
 		rooms[roomMsg.TID].Names[seatID] = roomMsg.Name
-		rooms[roomMsg.TID].Status[seatID] = "MANUAL"
-		rooms[roomMsg.TID].Types[seatID] = "ASSIGNED"
+		rooms[roomMsg.TID].Focus[seatID] = false
+		rooms[roomMsg.TID].CardsShow[seatID] = false
 		rooms[roomMsg.TID].Balances[seatID] = roomMsg.Balance
 
 		rooms[roomMsg.TID].MsgType = "ASSIGNED"
@@ -360,6 +360,28 @@ func assignSeatID(roomMsg RoomMsg) bool {
 	}
 
 	return true
+}
+
+func playerCheckCards(roomMsg RoomMsg) RoomMsg {
+	roomMsg.MsgType = "CARDSCHECKED"
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if roomMsg.Name == roomMsg.Names[i] {
+			roomMsg.CardsShow[i] = true
+			break
+		}
+		if i == 9 {
+			log.Println("Player not found in func: playerCheckCards")
+		}
+	}
+
+	return roomMsg
+}
+
+func cardsShowSetFalse(roomMsg RoomMsg) RoomMsg {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		roomMsg.CardsShow[i] = false
+	}
+	return roomMsg
 }
 
 // msgType: JOIN,ASSIGNED,NEWROUND,TIMEOUT,CLOSE, LEAVE
@@ -379,19 +401,35 @@ func roomsUpdate(roomMsg RoomMsg) time.Duration {
 		}
 	case "ASSIGNED":
 		rooms[roomMsg.TID].MsgType = "NEWROUND"
-		sendDelay = 5 * time.Second
+		sendDelay = 1 * time.Second
 		msgDelivery = true
 	case "NEWROUND":
+		rooms[roomMsg.TID] = cardsShowSetFalse(rooms[roomMsg.TID])
+		rooms[roomMsg.TID].MsgType = "CARDSDELIVERY"
+		sendDelay = 1 * time.Second
+		msgDelivery = true
+	case "CARDSDELIVERY":
 		cardsDelivery = true
+		rooms[roomMsg.TID] = cardsShowSetFalse(rooms[roomMsg.TID])
 		rooms[roomMsg.TID].MsgType = "SETFOCUS"
-		sendDelay = 2 * time.Second
+		sendDelay = 1 * time.Second
 		msgDelivery = false
+	case "CHECKCARDS":
+		sendDelay = time.Millisecond
+		msgDelivery = true
+		rooms[roomMsg.TID] = playerCheckCards(rooms[roomMsg.TID])
 	case "SETFOCUS":
+		sendDelay = time.Millisecond
 		rooms[roomMsg.TID].MsgType = "WAITING"
 		sendDelay = 12 * time.Second
 		msgDelivery = true
 	case "WAITING":
+		rooms[roomMsg.TID].MsgType = "WAITING"
 		sendDelay = 12 * time.Second
+		msgDelivery = true
+	case "CARDSCHECKED":
+		sendDelay = time.Millisecond
+		rooms[roomMsg.TID].MsgType = "WAITING"
 		msgDelivery = true
 	case "LEAVE":
 		sendDelay = 1 * time.Second
