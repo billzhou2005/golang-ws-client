@@ -102,8 +102,7 @@ func receiveJsonHandler(connection *websocket.Conn) {
 
 	defer close(done)
 
-	delay := 12 * time.Second
-	go tableInfoDevlivery(delay, ch)
+	go jsonInfoProcess(ch)
 
 	for {
 		err := connection.ReadJSON(&rcvMsg)
@@ -112,23 +111,23 @@ func receiveJsonHandler(connection *websocket.Conn) {
 			continue
 		}
 
-		roomMsg, cf1 := mapToStructRoomMsg(rcvMsg)
-		cards, cf2 := mapToStructCards(rcvMsg)
+		log.Println("Received json Type:", rcvMsg["type"])
 
-		if cf1 {
-			log.Println("R-roomMsg:", roomMsg)
-			ch <- roomMsgStructToMap(roomMsg)
-		}
-		if cf2 {
-			log.Println("R-cards:", cards)
-			ch <- cardsStructToMap(cards)
+		switch rcvMsg["type"] {
+		case "PLAYER":
+			ch <- rcvMsg
+			log.Println(rcvMsg)
+		case "ROOM":
+			ch <- rcvMsg
+			log.Println(rcvMsg)
+		case "CARDS":
+			ch <- rcvMsg
+			log.Println(rcvMsg)
+		default:
+			log.Println("Not room/player/cards json", rcvMsg)
 		}
 
-		if !cf1 && !cf2 {
-			log.Println("Not roomMsg or cards, invalid message from readJSON")
-		}
-
-		// delete map after used
+		// Empty map
 		for k := range rcvMsg {
 			delete(rcvMsg, k)
 		}
@@ -136,7 +135,7 @@ func receiveJsonHandler(connection *websocket.Conn) {
 	}
 }
 
-func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
+func jsonInfoProcess(ch chan map[string]interface{}) {
 	var t [rserve.VOL_ROOM_MAX]*time.Timer
 	// delayAuto := 6 * time.Second
 	// var nextPlayerMsg rcvMessage
@@ -145,6 +144,7 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 	var sendDelay time.Duration
 
 	sendMap := make(map[string]interface{})
+	delay := 12 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -162,7 +162,7 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 				sendDelay, msgDelivery, cardsDelivery = rserve.RoomsUpdate(rcvMsg)
 			}
 
-			roomNextMsg = rserve.Rooms[rcvMsg.TID]
+			roomNextMsg = rserve.Rooms[rcvMsg.RID]
 
 			log.Println("msgDelivery:", msgDelivery, "cardsDelivery:", cardsDelivery, "sendDelay:", sendDelay)
 
@@ -177,13 +177,13 @@ func tableInfoDevlivery(delay time.Duration, ch chan map[string]interface{}) {
 				delete(sendMap, k)
 			}
 
-			if (!cardsDelivery && !msgDelivery) && roomNextMsg.MsgType == "SETFOCUS" {
+			if (!cardsDelivery && !msgDelivery) && roomNextMsg.Type == "SETFOCUS" {
 				msgMapSend(roomMsgStructToMap(roomNextMsg))
 			}
 
 			if cardsDelivery {
 				cards = rserve.AddCardsInfo(cards)
-				cards.TID = 0
+				cards.RID = 0
 				msgMapSend(cardsStructToMap(cards))
 				cardsDelivery = false
 			}

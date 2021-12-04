@@ -13,70 +13,62 @@ const ROOM_PLAYERS_MAX int = 9
 var Rooms [VOL_ROOM_MAX]RoomMsg
 
 type RoomMsg struct {
-	TID       int       `json:"tID"`
-	Name      string    `json:"name"`
-	MsgType   string    `json:"msgType"`
-	Reserve   string    `json:"reserve"`
-	SeatID    int       `json:"seatID"`
-	Bvol      int       `json:"bvol"`
-	Balance   int       `json:"balance"`
-	FID       int       `json:"fID"`
-	Focus     [9]bool   `json:"focus"`
-	CardsShow [9]bool   `json:"cardsShow"`
-	Names     [9]string `json:"names"`
-	Balances  [9]int    `json:"balances"`
-}
-
-type Cards struct {
-	TID         int       `json:"tID"`
-	CardsName   string    `json:"cardsName"`
-	CardsPoints [27]int   `json:"cardsPoints"`
-	CardsSuits  [27]int   `json:"cardsSuits"`
-	CardsTypes  [9]string `json:"cardsTypes"`
+	Type       string    `json:"type"`
+	RID        int       `json:"rID"`
+	GameRound  int       `json:"gameRound"`
+	BetRound   int       `json:"betRound"`
+	DefendSeat int       `json:"defendSeat"`
+	Focuses    [9]bool   `json:"focuses"`
+	Players    [9]string `json:"players"`
+	Balances   [9]int    `json:"balances"`
+	CheckCards [9]bool   `json:"checkCards"`
+	Discards   [9]bool   `json:"discards"`
+	Reserve    string    `json:"reserve"`
 }
 
 type Player struct {
-	NickName string `json:"nickName"`
-	Sts      string `json:"sts"`
-	SID      int    `json:"sID"`
-	Vol      int    `json:"vol"`
-	Tol      int    `json:"Tol"`
+	Type      string `json:"type"`
+	RID       int    `json:"rID"`
+	PID       string `json:"pID"`
+	MsgType   string `json:"msgType"`
+	Name      string `json:"name"`
+	GameRound int    `json:"gameRound"`
+	BetRound  int    `json:"betRound"`
+	SeatID    int    `json:"seatID"`
+	SeatDID   int    `json:"seatDID"`
+	Focus     bool   `json:"focus"`
+	CheckCard bool   `json:"checkCard"`
+	Discard   bool   `json:"discard"`
+	BetVol    int    `json:"betVol"`
+	Balance   int    `json:"balance"`
+	Reserve   string `json:"reserve"`
 }
 
-type Card struct {
-	Points int `json:"points"`
-	Suits  int `json:"suits"`
-}
-
-type PlayerWithCards struct {
-	Cards [3]Card `json:"cards"`
-}
-
-type RoomMsgWithCards struct {
-	TID              int                `json:"tID"`
-	SType            string             `json:"sType"`
-	RType            string             `json:"rType"`
-	UsID             int                `json:"usID"`
-	FID              int                `json:"fID"`
-	Res              string             `json:"res"`
-	PlayersWithCards [6]PlayerWithCards `json:"playersWithCards"`
+type Cards struct {
+	Type        string    `json:"type"`
+	CardsName   string    `json:"cardsName"`
+	RID         int       `json:"rID"`
+	GameRound   int       `json:"gameRound"`
+	CardsPoints [27]int   `json:"cardsPoints"`
+	CardsSuits  [27]int   `json:"cardsSuits"`
+	CardsTypes  [9]string `json:"cardsTypes"`
+	Reserve     string    `json:"reserve"`
 }
 
 func init() {
 	for i := 0; i < VOL_ROOM_MAX; i++ {
-		Rooms[i].TID = 0
-		Rooms[i].Name = "UNKNOWN"
-		Rooms[i].MsgType = "NONE"
+		Rooms[i].Type = "ROOM"
+		Rooms[i].RID = 0
+		Rooms[i].GameRound = 0
+		Rooms[i].BetRound = 0
+		Rooms[i].DefendSeat = 0
 		Rooms[i].Reserve = "TBD"
-		Rooms[i].SeatID = 0
-		Rooms[i].Bvol = 0
-		Rooms[i].Balance = 0
-		Rooms[i].FID = 0
 		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
-			Rooms[i].Focus[j] = false
-			Rooms[i].CardsShow[j] = false
-			Rooms[i].Names[j] = "UNKNOWN"
+			Rooms[i].Focuses[j] = false
+			Rooms[i].Players[j] = "UNKNOWN"
 			Rooms[i].Balances[j] = 0
+			Rooms[i].CheckCards[j] = false
+			Rooms[i].Discards[j] = true
 		}
 	}
 }
@@ -88,9 +80,9 @@ func RoomsUpdate(roomMsg RoomMsg) (time.Duration, bool, bool) {
 	msgDelivery := false
 	cardsDelivery := false
 
-	switch roomMsg.MsgType {
+	switch roomMsg.Type {
 	case "JOIN":
-		Rooms[roomMsg.TID] = addAutoPlayers(Rooms[roomMsg.TID])
+		Rooms[roomMsg.RID] = addAutoPlayers(Rooms[roomMsg.RID])
 		isOk := assignSeatID(roomMsg)
 		sendDelay = time.Millisecond
 		msgDelivery = true
@@ -99,42 +91,42 @@ func RoomsUpdate(roomMsg RoomMsg) (time.Duration, bool, bool) {
 			sendDelay = 3 * time.Second
 		}
 	case "ASSIGNED":
-		Rooms[roomMsg.TID].MsgType = "NEWROUND"
+		Rooms[roomMsg.RID].Type = "NEWROUND"
 		sendDelay = 1 * time.Second
 		msgDelivery = true
 	case "NEWROUND":
-		Rooms[roomMsg.TID] = cardsShowSetFalse(Rooms[roomMsg.TID])
-		Rooms[roomMsg.TID].MsgType = "CARDSDELIVERY"
+		Rooms[roomMsg.RID] = cardsShowSetFalse(Rooms[roomMsg.RID])
+		Rooms[roomMsg.RID].Type = "CARDSDELIVERY"
 		sendDelay = 1 * time.Second
 		msgDelivery = true
 	case "CARDSDELIVERY":
 		cardsDelivery = true
-		Rooms[roomMsg.TID] = cardsShowSetFalse(Rooms[roomMsg.TID])
-		Rooms[roomMsg.TID].MsgType = "SETFOCUS"
+		Rooms[roomMsg.RID] = cardsShowSetFalse(Rooms[roomMsg.RID])
+		Rooms[roomMsg.RID].Type = "SETFOCUS"
 		sendDelay = 1 * time.Second
 		msgDelivery = false
 	case "CHECKCARDS":
 		sendDelay = time.Millisecond
 		msgDelivery = true
-		Rooms[roomMsg.TID] = playerCheckCards(Rooms[roomMsg.TID])
+		Rooms[roomMsg.RID] = playerCheckCards(Rooms[roomMsg.RID])
 	case "SETFOCUS":
 		sendDelay = time.Millisecond
-		Rooms[roomMsg.TID].MsgType = "WAITING"
+		Rooms[roomMsg.RID].Type = "WAITING"
 		sendDelay = 12 * time.Second
 		msgDelivery = true
 	case "WAITING":
-		Rooms[roomMsg.TID].MsgType = "WAITING"
+		Rooms[roomMsg.RID].Type = "WAITING"
 		sendDelay = 12 * time.Second
 		msgDelivery = true
 	case "CARDSCHECKED":
 		sendDelay = time.Millisecond
-		Rooms[roomMsg.TID].MsgType = "WAITING"
+		Rooms[roomMsg.RID].Type = "WAITING"
 		msgDelivery = true
 	case "LEAVE":
 		sendDelay = 1 * time.Second
 		msgDelivery = true
-		Rooms[roomMsg.TID] = deleteLeavePlayers(Rooms[roomMsg.TID], roomMsg.Name)
-		Rooms[roomMsg.TID].MsgType = "WAITING"
+		Rooms[roomMsg.RID] = deleteLeavePlayers(Rooms[roomMsg.RID], roomMsg.Reserve)
+		Rooms[roomMsg.RID].Type = "WAITING"
 	default:
 		log.Println("Rooms info no need to update")
 		sendDelay = 12 * time.Second
@@ -169,16 +161,16 @@ func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 
 	numofp = 0
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Names[i] != "UNKNOWN" {
+		if roomMsg.Players[i] != "UNKNOWN" {
 			numofp++
 		}
 	}
 
 	if numofp == 0 {
 		for j := 0; j < 3; j++ {
-			roomMsg.Names[j] = nickName[randomNums[j]]
-			roomMsg.Focus[j] = false
-			roomMsg.CardsShow[j] = false
+			roomMsg.Players[j] = nickName[randomNums[j]]
+			roomMsg.Focuses[j] = false
+			roomMsg.CheckCards[j] = false
 			roomMsg.Balances[j] = 6600000 + randomNums[j]*100000 // add random balance for auto user
 		}
 	}
@@ -188,10 +180,10 @@ func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 func deleteLeavePlayers(roomMsg RoomMsg, name string) RoomMsg {
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Names[i] == name {
-			roomMsg.Focus[i] = false
-			roomMsg.CardsShow[i] = false
-			roomMsg.Names[i] = "UNKNOWN"
+		if roomMsg.Players[i] == name {
+			roomMsg.Focuses[i] = false
+			roomMsg.CheckCards[i] = false
+			roomMsg.Players[i] = "UNKNOWN"
 			roomMsg.Balances[i] = 0
 		}
 	}
@@ -203,7 +195,7 @@ func assignSeatID(roomMsg RoomMsg) bool {
 	seatID := 100
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if Rooms[roomMsg.TID].Names[i] == "UNKNOWN" {
+		if Rooms[roomMsg.RID].Players[i] == "UNKNOWN" {
 			seatID = i
 			break
 		}
@@ -211,10 +203,10 @@ func assignSeatID(roomMsg RoomMsg) bool {
 
 	// check re-assigned or not
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if Rooms[roomMsg.TID].Names[i] == roomMsg.Name {
+		if Rooms[roomMsg.RID].Players[i] == roomMsg.Reserve {
 			seatID = 100
-			Rooms[roomMsg.TID].MsgType = "ASSIGNED"
-			log.Println("Assgin SeatID failed, duplicated user:", roomMsg.Name)
+			Rooms[roomMsg.RID].Type = "ASSIGNED"
+			log.Println("Assgin SeatID failed, duplicated user:", roomMsg.Reserve)
 			return false
 		}
 	}
@@ -225,24 +217,23 @@ func assignSeatID(roomMsg RoomMsg) bool {
 	}
 
 	if seatID < ROOM_PLAYERS_MAX {
-		Rooms[roomMsg.TID].Names[seatID] = roomMsg.Name
-		Rooms[roomMsg.TID].Focus[seatID] = false
-		Rooms[roomMsg.TID].CardsShow[seatID] = false
-		Rooms[roomMsg.TID].Balances[seatID] = roomMsg.Balance
+		Rooms[roomMsg.RID].Players[seatID] = roomMsg.Reserve
+		Rooms[roomMsg.RID].Focuses[seatID] = false
+		Rooms[roomMsg.RID].CheckCards[seatID] = false
+		Rooms[roomMsg.RID].Balances[seatID] = 0
 
-		Rooms[roomMsg.TID].MsgType = "ASSIGNED"
-		Rooms[roomMsg.TID].Name = roomMsg.Name
-		Rooms[roomMsg.TID].SeatID = seatID
+		Rooms[roomMsg.RID].Type = "ASSIGNED"
+		Rooms[roomMsg.RID].Reserve = roomMsg.Reserve
 	}
 
 	return true
 }
 
 func playerCheckCards(roomMsg RoomMsg) RoomMsg {
-	roomMsg.MsgType = "CARDSCHECKED"
+	roomMsg.Type = "CARDSCHECKED"
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Name == roomMsg.Names[i] {
-			roomMsg.CardsShow[i] = true
+		if roomMsg.Reserve == roomMsg.Players[i] {
+			roomMsg.CheckCards[i] = true
 			break
 		}
 		if i == 9 {
@@ -255,7 +246,7 @@ func playerCheckCards(roomMsg RoomMsg) RoomMsg {
 
 func cardsShowSetFalse(roomMsg RoomMsg) RoomMsg {
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		roomMsg.CardsShow[i] = false
+		roomMsg.CheckCards[i] = false
 	}
 	return roomMsg
 }
