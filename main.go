@@ -111,18 +111,13 @@ func receiveJsonHandler(connection *websocket.Conn) {
 			continue
 		}
 
-		log.Println("Received json Type:", rcvMsg["type"])
-
 		switch rcvMsg["type"] {
 		case "PLAYER":
 			ch <- rcvMsg
-			log.Println(rcvMsg)
 		case "ROOM":
 			ch <- rcvMsg
-			log.Println(rcvMsg)
 		case "CARDS":
 			ch <- rcvMsg
-			log.Println(rcvMsg)
 		default:
 			log.Println("Not room/player/cards json", rcvMsg)
 		}
