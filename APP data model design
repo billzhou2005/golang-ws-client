@@ -1,0 +1,63 @@
+Game APP Data model design
+
+
+1. APP Features
+1) Register
+	player:
+		name:
+		mobile telephone:
+		email:
+		sex:male/female
+2) Log in 
+	mobile phone:
+	password or verification code:
+3) Buy bonus: 
+	room card:10 rmb --> 20 rounds
+
+4) Enter room - 4 digit numbers(e.g. 5122)
+5) ...
+
+
+2. Playing data exchange
+1) room:
+	type:ROOM	
+	rid:0-~
+	status: "WAITING"
+	gameRound:
+	betRound:
+	defendseat:
+	focuses:[0,0,..,0]
+	players: ["aa","bb",...,"ii"]
+	balances: [0,0,...,0]
+	checkcards: [false, ...,false]
+	discards: [true,...,true]
+	reserve: "TBD"
+	
+2) player:
+	type:PLAYER
+	rid:	0
+	pid:0
+	msgType:	JOIN/LEFT/WAITING/PLAYING
+	name:"aa"
+	gameRound:
+	betRound:
+	seatID:0
+	seatDID:0
+	focus:false
+	checkcard:false
+	discard:false
+	betvol:0
+	balance:0
+	robot:false
+	reserve:"TBD"
+
+3) cards:
+	type:CARDS	
+	cardsName:jh
+	rid:	0
+	gameRound:0
+	points: 0-12
+	suits: 0-3
+	cardsTypes: "Higcard", "Pair",...
+	reserve: "TBD"
+4) The props(道具)

@@ -50,7 +50,7 @@ func main() {
 		log.Fatal("Error connecting to Websocket Server:", err)
 	}
 	defer conn.Close()
-	// go receiveHandler(conn)
+
 	go receiveJsonHandler(conn)
 
 	// Our main loop for the client
@@ -114,7 +114,9 @@ func receiveJsonHandler(connection *websocket.Conn) {
 		switch rcvMsg["type"] {
 		case "PLAYER":
 			ch <- rcvMsg
+			log.Println("Received Player data!-1")
 		case "ROOM":
+			log.Println("Received Room data!-1")
 			ch <- rcvMsg
 		case "CARDS":
 			ch <- rcvMsg
@@ -139,7 +141,7 @@ func jsonInfoProcess(ch chan map[string]interface{}) {
 	var sendDelay time.Duration
 
 	sendMap := make(map[string]interface{})
-	delay := 12 * time.Second
+	delay := 3 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -151,6 +153,7 @@ func jsonInfoProcess(ch chan map[string]interface{}) {
 		select {
 		case rcv := <-ch:
 
+			log.Println("Received Room data!-2")
 			rcvMsg, convertFlag := mapToStructRoomMsg(rcv)
 			if convertFlag {
 				log.Println("rcvMsg:", rcvMsg)
@@ -165,8 +168,8 @@ func jsonInfoProcess(ch chan map[string]interface{}) {
 
 			continue
 		case <-t[0].C:
-			fmt.Println("T0 response---")
-
+			rserve.Rooms[0] = rserve.RoomStartSet(rserve.Rooms[0])
+			log.Println(rserve.Rooms[0])
 			// delete map before assigned
 			for k := range sendMap {
 				delete(sendMap, k)
@@ -230,6 +233,7 @@ func mapToStructRoomMsg(m map[string]interface{}) (rserve.RoomMsg, bool) {
 	return roomMsg, true
 }
 
+/*
 func mapToStructCards(m map[string]interface{}) (rserve.Cards, bool) {
 	var cards rserve.Cards
 
@@ -252,6 +256,7 @@ func mapToStructCards(m map[string]interface{}) (rserve.Cards, bool) {
 
 	return cards, true
 }
+*/
 func roomMsgStructToMap(roomMsg rserve.RoomMsg) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
