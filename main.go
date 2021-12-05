@@ -13,8 +13,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var cardsDelivery bool
-
 var done chan interface{}
 var interrupt chan os.Signal
 var sendChan chan map[string]interface{}
@@ -39,8 +37,6 @@ func main() {
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
 	sendChan = make(chan map[string]interface{})
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
-
-	cardsDelivery = false
 
 	socketUrl := "ws://140.143.149.188:9080" + "/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(socketUrl, nil)
@@ -154,11 +150,12 @@ func roomServe(chPlayer chan rserve.Player) {
 			rserve.Rooms[0] = rserve.RoomStatusUpdate(rserve.Rooms[0])
 			msgMapSend(roomShareStructToMap(rserve.Rooms[0].RoomShare))
 
-			if cardsDelivery {
-				cards = rserve.AddCardsInfo(cards)
+			if rserve.Rooms[0].RoomShare.Status == "START" {
+				cards = rserve.AddCardsInfo(cards, rserve.Rooms[0].RoomShare.RID)
 				cards.RID = 0
+				cards.GameRound = rserve.Rooms[0].RoomShare.GameRound
+				// rserve.RoomsCards[rserve.Rooms[0].RoomShare.RID] = cards
 				msgMapSend(cardsStructToMap(cards))
-				cardsDelivery = false
 			}
 
 			log.Println("T0 message, interval:", delay)

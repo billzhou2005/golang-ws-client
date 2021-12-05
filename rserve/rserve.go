@@ -11,6 +11,7 @@ const VOL_ROOM_MAX int = 3
 const ROOM_PLAYERS_MAX int = 9
 
 var Rooms [VOL_ROOM_MAX]Room
+var RoomsCards [VOL_ROOM_MAX][ROOM_PLAYERS_MAX]util.Player
 
 type Room struct {
 	Activated bool      `json:"activated"`
@@ -85,17 +86,27 @@ func RoomStatusUpdate(room Room) Room {
 		room.RoomShare.Status = "START"
 	case "START":
 		room.RoomShare.Status = "BETTING"
-
+		room.RoomShare.GameRound++
 	case "BETTING":
 		room.RoomShare.Status = "SETTLE"
 
 	case "SETTLE":
+		playerCardsCompare(room, 0, 1)
 		room.RoomShare.Status = "WAITING"
 	default:
 		log.Println("Unknow Room Status", room.RoomShare.Status)
 		room.RoomShare.Status = "WAITING"
 	}
 	return room
+}
+
+func playerCardsCompare(room Room, seat1 int, seat2 int) int {
+	log.Println("SeatID:", seat1, RoomsCards[room.RoomShare.RID][seat1].Cardsscore, RoomsCards[room.RoomShare.RID][seat1].Cards)
+	log.Println("SeatID:", seat2, RoomsCards[room.RoomShare.RID][seat2].Cardsscore, RoomsCards[room.RoomShare.RID][seat2].Cards)
+	if RoomsCards[room.RoomShare.RID][seat1].Cardsscore > RoomsCards[room.RoomShare.RID][seat2].Cardsscore {
+		return seat1
+	}
+	return seat2
 }
 
 func PlayerInfoProcess(player Player) (bool, Player) {
@@ -111,6 +122,8 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 			return true, player
 		}
 		log.Println(Rooms[player.RID])
+	case "LEAVE":
+		Rooms[player.RID] = deleteLeavePlayers(Rooms[player.RID], player)
 	default:
 		log.Println("player.MsgType", player.MsgType)
 
@@ -193,82 +206,50 @@ func RoomStartSet(room RoomShare) RoomShare {
 	return room
 }
 
-// msgType: JOIN,ASSIGNED,NEWROUND,TIMEOUT,CLOSE, LEAVE
-
-func RoomsUpdate(room RoomShare) (time.Duration, bool, bool) {
-	sendDelay := time.Millisecond
-	msgDelivery := false
-	cardsDelivery := false
-
-	switch room.Status {
-	case "START":
-		log.Println("Received RoomShare data!-3", room.Status)
-		sendDelay = 1 * time.Second
-		msgDelivery = true
-	case "JOIN":
-		// isOk := assignSeatID(room)
-		sendDelay = time.Millisecond
-		msgDelivery = true
-	case "ASSIGNED":
-		sendDelay = 1 * time.Second
-		msgDelivery = true
-	case "CARDSDELIVERY":
-		cardsDelivery = true
-		sendDelay = 1 * time.Second
-		msgDelivery = false
-	case "CHECKCARDS":
-		sendDelay = time.Millisecond
-		msgDelivery = true
-	case "SETFOCUS":
-		sendDelay = time.Millisecond
-		sendDelay = 12 * time.Second
-		msgDelivery = true
-	case "WAITING":
-		sendDelay = 12 * time.Second
-		msgDelivery = true
-	case "CARDSCHECKED":
-		sendDelay = time.Millisecond
-		msgDelivery = true
-	case "LEAVE":
-		sendDelay = 1 * time.Second
-		msgDelivery = true
-	default:
-		log.Println("Rooms info no need to update")
-		sendDelay = 12 * time.Second
-		msgDelivery = true
-	}
-
-	return sendDelay, msgDelivery, cardsDelivery
-}
-
-func AddCardsInfo(cards Cards) Cards {
+func AddCardsInfo(cards Cards, rID int) Cards {
+	cards.Type = "CARDS"
 	cards.CardsName = "jhCards"
 
-	players := util.GetPlayersCards(50000012, 9)
-	// fmt.Println(players)
+	RoomsCards[rID] = util.GetPlayersCards(50000012, 9)
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		cards.CardsTypes[i] = players[i].Cardstype
+		cards.CardsTypes[i] = RoomsCards[rID][i].Cardstype
 		for j := 0; j < 3; j++ {
-			cards.CardsPoints[3*i+j] = players[i].Cards[j].Points
-			cards.CardsSuits[3*i+j] = players[i].Cards[j].Suits
+			cards.CardsPoints[3*i+j] = RoomsCards[rID][i].Cards[j].Points
+			cards.CardsSuits[3*i+j] = RoomsCards[rID][i].Cards[j].Suits
 		}
 	}
 
+	log.Println("Room cards update, rID:", rID, RoomsCards[rID])
 	return cards
 }
 
-func deleteLeavePlayers(room RoomShare, name string) RoomShare {
-
+func deleteLeavePlayers(room Room, player Player) Room {
+	seatID := 100
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if room.Players[i] == name {
-			room.Focuses[i] = false
-			// room.CheckCards[i] = false
-			room.Players[i] = "UNKNOWN"
-			room.Balances[i] = 0
+		if room.RoomShare.Players[i] == player.Name {
+			seatID = i
 		}
 	}
 
+	if seatID > 8 {
+		log.Println("Delete Player failed", seatID)
+		return room
+	}
+	room.RoomShare.Focuses[seatID] = false
+	room.RoomShare.Players[seatID] = "UNKNOWN"
+	room.RoomShare.Balances[seatID] = 0
+	room.Players[seatID].Name = "UNKNOWN"
+	room.Players[seatID].PID = "UNKNOWN"
+	room.Players[seatID].MsgType = "LEFT"
+	room.Players[seatID].SeatID = 100
+	room.Players[seatID].SeatDID = 100
+	room.Players[seatID].Focus = false
+	room.Players[seatID].Discard = true
+	room.Players[seatID].CheckCard = false
+	room.Players[seatID].BetVol = 0
+	room.Players[seatID].Balance = 0
+	room.Players[seatID].Robot = false
 	return room
 }
 
