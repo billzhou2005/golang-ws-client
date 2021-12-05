@@ -7,17 +7,18 @@ import (
 	"time"
 )
 
-type Err struct {
-	code int
-	des  string
-}
-
 const VOL_ROOM_MAX int = 3
 const ROOM_PLAYERS_MAX int = 9
 
-var Rooms [VOL_ROOM_MAX]RoomMsg
+var Rooms [VOL_ROOM_MAX]Room
 
-type RoomMsg struct {
+type Room struct {
+	Activated bool      `json:"activated"`
+	RoomShare RoomShare `json:"roomShare"`
+	Players   [9]Player `json:"players"`
+}
+
+type RoomShare struct {
 	Type       string    `json:"type"`
 	RID        int       `json:"rID"`
 	Status     string    `json:"status"`
@@ -27,9 +28,6 @@ type RoomMsg struct {
 	Focuses    [9]bool   `json:"focuses"`
 	Players    [9]string `json:"players"`
 	Balances   [9]int    `json:"balances"`
-	CheckCards [9]bool   `json:"checkCards"`
-	Discards   [9]bool   `json:"discards"`
-	Robots     [9]bool   `json:"robots"`
 	Reserve    string    `json:"reserve"`
 }
 
@@ -39,8 +37,6 @@ type Player struct {
 	PID       string `json:"pID"`
 	MsgType   string `json:"msgType"`
 	Name      string `json:"name"`
-	GameRound int    `json:"gameRound"`
-	BetRound  int    `json:"betRound"`
 	SeatID    int    `json:"seatID"`
 	SeatDID   int    `json:"seatDID"`
 	Focus     bool   `json:"focus"`
@@ -65,25 +61,65 @@ type Cards struct {
 
 func init() {
 	for i := 0; i < VOL_ROOM_MAX; i++ {
-		Rooms[i].Type = "ROOM"
-		Rooms[i].RID = 0
-		Rooms[i].Status = "WAITING"
-		Rooms[i].GameRound = 0
-		Rooms[i].BetRound = 0
-		Rooms[i].DefendSeat = 0
-		Rooms[i].Reserve = "TBD"
+		Rooms[i].Activated = true
+		Rooms[i].RoomShare.Type = "ROOM"
+		Rooms[i].RoomShare.RID = i
+		Rooms[i].RoomShare.Status = "WAITING"
+		Rooms[i].RoomShare.GameRound = 0
+		Rooms[i].RoomShare.BetRound = 0
+		Rooms[i].RoomShare.DefendSeat = 0
+		Rooms[i].RoomShare.Reserve = "TBD"
 		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
-			Rooms[i].Focuses[j] = false
-			Rooms[i].Players[j] = "UNKNOWN"
-			Rooms[i].Balances[j] = 0
-			Rooms[i].CheckCards[j] = false
-			Rooms[i].Discards[j] = true
-			Rooms[i].Robots[j] = false
+			Rooms[i].RoomShare.Focuses[j] = false
+			Rooms[i].RoomShare.Players[j] = "UNKNOWN"
+			Rooms[i].RoomShare.Balances[j] = 0
 		}
 	}
+
 	Rooms[0] = addAutoPlayers(Rooms[0])
 }
-func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
+
+func RoomStatusUpdate(room Room) Room {
+	switch room.RoomShare.Status {
+	case "WAITING":
+		room.RoomShare.Status = "START"
+	case "START":
+		room.RoomShare.Status = "BETTING"
+
+	case "BETTING":
+		room.RoomShare.Status = "SETTLE"
+
+	case "SETTLE":
+		room.RoomShare.Status = "WAITING"
+	default:
+		log.Println("Unknow Room Status", room.RoomShare.Status)
+		room.RoomShare.Status = "WAITING"
+	}
+	return room
+}
+
+func PlayerInfoProcess(player Player) (bool, Player) {
+	// RoomStartSet(Rooms[player.RID])
+	switch player.MsgType {
+	case "JOIN":
+		isOk, seatID := assignSeatID(player)
+		if isOk {
+			player.SeatID = seatID
+			player.MsgType = "ASSIGNED"
+			Rooms[player.RID].Players[seatID] = player
+			log.Println("login user assigned seat-Sucess")
+			return true, player
+		}
+		log.Println(Rooms[player.RID])
+	default:
+		log.Println("player.MsgType", player.MsgType)
+
+	}
+
+	return false, player
+}
+
+func addAutoPlayers(room Room) Room {
 	var nickName = [...]string{"流逝的风", "每天赢5千", "不好就不要", "牛牛牛009", "风清猪的", "总是输没完了", "适度就是", "无畏了吗", "见好就收", "坚持到底", "三手要比", "不勉强", "搞不懂", "吴潇无暇", "大赌棍", "一直无感", "逍遥子", "风月浪", "独善其身", "赌神"}
 	var numofp int
 
@@ -91,50 +127,60 @@ func addAutoPlayers(roomMsg RoomMsg) RoomMsg {
 
 	numofp = 0
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Players[i] != "UNKNOWN" {
+		if room.RoomShare.Players[i] != "UNKNOWN" {
 			numofp++
 		}
 	}
 
 	if numofp == 0 {
 		for j := 0; j < 3; j++ {
-			roomMsg.Focuses[j] = false
-			roomMsg.Players[j] = nickName[randomNums[j]]
-			roomMsg.Balances[j] = 6600000 + randomNums[j]*100000 // add random balance for auto user
-			roomMsg.CheckCards[j] = false
-			roomMsg.Discards[j] = false
-			roomMsg.Robots[j] = true
+			room.RoomShare.Focuses[j] = false
+			room.RoomShare.Players[j] = nickName[randomNums[j]]
+			room.RoomShare.Balances[j] = 6600000 + randomNums[j]*100000 // add random balance for auto user
+			room.Players[j].Type = "PLAYER"
+			room.Players[j].RID = room.RoomShare.RID
+			room.Players[j].PID = "xxxaaa88"
+			room.Players[j].MsgType = "ASSIGNED"
+			room.Players[j].Name = nickName[randomNums[j]]
+			room.Players[j].SeatID = j
+			room.Players[j].Focus = false
+			room.Players[j].CheckCard = false
+			room.Players[j].Discard = true
+			room.Players[j].BetVol = 0
+			room.Players[j].Balance = room.RoomShare.Balances[j]
+			room.Players[j].Robot = true
+			room.Players[j].Reserve = "TBD"
 		}
 	}
 
-	return roomMsg
+	return room
 }
 
-func RoomStartSet(roomMsg RoomMsg) RoomMsg {
-	if roomMsg.Status != "WAITING" {
-		return roomMsg
+func RoomStartSet(room RoomShare) RoomShare {
+	if room.Status != "WAITING" {
+		return room
 	}
 
 	numofp := 0
 	focusCount := 0
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Players[i] != "UNKNOWN" {
+		if room.Players[i] != "UNKNOWN" {
 			numofp++
-			if roomMsg.Focuses[i] {
+			if room.Focuses[i] {
 				focusCount++
 			}
 		}
 	}
 	if numofp < 1 {
-		roomMsg.Status = "WAITING"
-		return roomMsg
+		room.Status = "WAITING"
+		return room
 	}
 
 	switch focusCount {
 	case 0:
 		for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-			if !roomMsg.Focuses[i] && roomMsg.Players[i] != "UNKNOWN" {
-				roomMsg.Focuses[i] = true
+			if !room.Focuses[i] && room.Players[i] != "UNKNOWN" {
+				room.Focuses[i] = true
 				break
 			}
 		}
@@ -143,64 +189,49 @@ func RoomStartSet(roomMsg RoomMsg) RoomMsg {
 	default:
 		log.Println("focusCount Invalid error:", focusCount)
 	}
-	roomMsg.Status = "START"
-	return roomMsg
+	room.Status = "START"
+	return room
 }
 
 // msgType: JOIN,ASSIGNED,NEWROUND,TIMEOUT,CLOSE, LEAVE
 
-func RoomsUpdate(roomMsg RoomMsg) (time.Duration, bool, bool) {
+func RoomsUpdate(room RoomShare) (time.Duration, bool, bool) {
 	sendDelay := time.Millisecond
 	msgDelivery := false
 	cardsDelivery := false
 
-	switch roomMsg.Status {
+	switch room.Status {
 	case "START":
-		log.Println("Received Room data!-3", roomMsg.Status)
-		Rooms[roomMsg.RID] = cardsShowSetFalse(Rooms[roomMsg.RID])
-		Rooms[roomMsg.RID].Status = "CARDSDELIVERY"
+		log.Println("Received RoomShare data!-3", room.Status)
 		sendDelay = 1 * time.Second
 		msgDelivery = true
 	case "JOIN":
-		isOk := assignSeatID(roomMsg)
+		// isOk := assignSeatID(room)
 		sendDelay = time.Millisecond
 		msgDelivery = true
-		if !isOk {
-			log.Println("login user assigned seat-failed")
-			sendDelay = 3 * time.Second
-		}
 	case "ASSIGNED":
-		Rooms[roomMsg.RID].Status = "NEWROUND"
 		sendDelay = 1 * time.Second
 		msgDelivery = true
 	case "CARDSDELIVERY":
 		cardsDelivery = true
-		Rooms[roomMsg.RID] = cardsShowSetFalse(Rooms[roomMsg.RID])
-		Rooms[roomMsg.RID].Status = "SETFOCUS"
 		sendDelay = 1 * time.Second
 		msgDelivery = false
 	case "CHECKCARDS":
 		sendDelay = time.Millisecond
 		msgDelivery = true
-		Rooms[roomMsg.RID] = playerCheckCards(Rooms[roomMsg.RID])
 	case "SETFOCUS":
 		sendDelay = time.Millisecond
-		Rooms[roomMsg.RID].Status = "WAITING"
 		sendDelay = 12 * time.Second
 		msgDelivery = true
 	case "WAITING":
-		Rooms[roomMsg.RID].Status = "WAITING"
 		sendDelay = 12 * time.Second
 		msgDelivery = true
 	case "CARDSCHECKED":
 		sendDelay = time.Millisecond
-		Rooms[roomMsg.RID].Status = "WAITING"
 		msgDelivery = true
 	case "LEAVE":
 		sendDelay = 1 * time.Second
 		msgDelivery = true
-		Rooms[roomMsg.RID] = deleteLeavePlayers(Rooms[roomMsg.RID], roomMsg.Reserve)
-		Rooms[roomMsg.RID].Status = "WAITING"
 	default:
 		log.Println("Rooms info no need to update")
 		sendDelay = 12 * time.Second
@@ -227,25 +258,25 @@ func AddCardsInfo(cards Cards) Cards {
 	return cards
 }
 
-func deleteLeavePlayers(roomMsg RoomMsg, name string) RoomMsg {
+func deleteLeavePlayers(room RoomShare, name string) RoomShare {
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Players[i] == name {
-			roomMsg.Focuses[i] = false
-			roomMsg.CheckCards[i] = false
-			roomMsg.Players[i] = "UNKNOWN"
-			roomMsg.Balances[i] = 0
+		if room.Players[i] == name {
+			room.Focuses[i] = false
+			// room.CheckCards[i] = false
+			room.Players[i] = "UNKNOWN"
+			room.Balances[i] = 0
 		}
 	}
 
-	return roomMsg
+	return room
 }
 
-func assignSeatID(roomMsg RoomMsg) bool {
+func assignSeatID(player Player) (bool, int) {
 	seatID := 100
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if Rooms[roomMsg.RID].Players[i] == "UNKNOWN" {
+		if Rooms[player.RID].RoomShare.Players[i] == "UNKNOWN" {
 			seatID = i
 			break
 		}
@@ -253,37 +284,32 @@ func assignSeatID(roomMsg RoomMsg) bool {
 
 	// check re-assigned or not
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if Rooms[roomMsg.RID].Players[i] == roomMsg.Reserve {
+		if Rooms[player.RID].RoomShare.Players[i] == player.Name {
 			seatID = 100
-			Rooms[roomMsg.RID].Status = "ASSIGNED"
-			log.Println("Assgin SeatID failed, duplicated user:", roomMsg.Reserve)
-			return false
+			log.Println("Assgin SeatID failed, duplicated user:", player.Name)
+			return false, seatID
 		}
 	}
 
 	if seatID == 100 {
 		log.Println("Assgin SeatID failed, the room is full:", ROOM_PLAYERS_MAX)
-		return false
+		return false, seatID
 	}
 
 	if seatID < ROOM_PLAYERS_MAX {
-		Rooms[roomMsg.RID].Players[seatID] = roomMsg.Reserve
-		Rooms[roomMsg.RID].Focuses[seatID] = false
-		Rooms[roomMsg.RID].CheckCards[seatID] = false
-		Rooms[roomMsg.RID].Balances[seatID] = 0
-
-		Rooms[roomMsg.RID].Status = "ASSIGNED"
-		Rooms[roomMsg.RID].Reserve = roomMsg.Reserve
+		Rooms[player.RID].RoomShare.Focuses[seatID] = false
+		Rooms[player.RID].RoomShare.Players[seatID] = player.Name
+		Rooms[player.RID].RoomShare.Balances[seatID] = player.Balance
 	}
 
-	return true
+	return true, seatID
 }
 
-func playerCheckCards(roomMsg RoomMsg) RoomMsg {
-	roomMsg.Status = "CARDSCHECKED"
+func playerCheckCards(room RoomShare) RoomShare {
+	room.Status = "CARDSCHECKED"
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if roomMsg.Reserve == roomMsg.Players[i] {
-			roomMsg.CheckCards[i] = true
+		if room.Reserve == room.Players[i] {
+			room.Focuses[i] = true
 			break
 		}
 		if i == 9 {
@@ -291,14 +317,14 @@ func playerCheckCards(roomMsg RoomMsg) RoomMsg {
 		}
 	}
 
-	return roomMsg
+	return room
 }
 
-func cardsShowSetFalse(roomMsg RoomMsg) RoomMsg {
+func cardsShowSetFalse(room RoomShare) RoomShare {
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		roomMsg.CheckCards[i] = false
+		room.Focuses[i] = false
 	}
-	return roomMsg
+	return room
 }
 
 func generateRandomNumber(start int, end int, count int) []int {
