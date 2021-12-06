@@ -25,6 +25,8 @@ type RoomShare struct {
 	Status     string    `json:"status"`
 	GameRound  int       `json:"gameRound"`
 	BetRound   int       `json:"betRound"`
+	LostSeat   int       `json:"lostSeat"`
+	WinnerSeat int       `json:"winnerSeat"`
 	DefendSeat int       `json:"defendSeat"`
 	Focuses    [9]bool   `json:"focuses"`
 	Players    [9]string `json:"players"`
@@ -74,6 +76,9 @@ func init() {
 			Rooms[i].RoomShare.Focuses[j] = false
 			Rooms[i].RoomShare.Players[j] = "UNKNOWN"
 			Rooms[i].RoomShare.Balances[j] = 0
+			Rooms[i].Players[j].RID = i
+			Rooms[i].Players[j].Name = "UNKNOWN"
+			Rooms[i].Players[j].Discard = true
 		}
 	}
 
@@ -81,21 +86,49 @@ func init() {
 }
 
 func RoomStatusUpdate(room Room) Room {
+	log.Println(room.RoomShare.Status)
 	switch room.RoomShare.Status {
 	case "WAITING":
-		room.RoomShare.Status = "START"
-		room.RoomShare.BetRound = 0
-		room.RoomShare.DefendSeat = 0
-		roomPlayersStartUpdate(room)
+		room = roomPlayersStartUpdate(room)
 	case "START":
 		room.RoomShare.Status = "BETTING"
 	case "BETTING":
 		room.RoomShare.BetRound++
-		room.RoomShare.Status = "SETTLE"
-		playerCardsCompare(room, 0, 1)
+
+		sumNotDiscard := roomSumNotDiscard(room)
+		log.Println("sumNotDiscard", sumNotDiscard)
+		if len(sumNotDiscard) == 2 {
+			lostSeat := playerCardsCompare(room, sumNotDiscard[0], sumNotDiscard[1])
+			room.Players[lostSeat].Discard = true
+			room.Players[lostSeat].MsgType = "LOST"
+			room.RoomShare.LostSeat = lostSeat
+		}
+		if len(sumNotDiscard) == 1 {
+			room.RoomShare.Status = "SETTLE"
+		}
+		/*
+			b, _ := json.Marshal(room)
+			log.Println("Room info:")
+			log.Println(string(b)) */
+		robotSeatIDs := roomSumRobostsNotDiscard(room)
+		log.Println("robotSeatIDs", robotSeatIDs)
+		if len(robotSeatIDs) > 2 {
+			lostSeat := playerCardsCompare(room, robotSeatIDs[0], robotSeatIDs[1])
+			room.Players[lostSeat].Discard = true
+			room.Players[lostSeat].MsgType = "LOST"
+			room.RoomShare.LostSeat = lostSeat
+			room.RoomShare.Status = "BETTING"
+		}
 	case "SETTLE":
-		room.RoomShare.Status = "WAITING"
-		room.RoomShare.GameRound++
+		sumNotDiscard := roomSumNotDiscard(room)
+		if len(sumNotDiscard) == 1 {
+			room.Players[sumNotDiscard[0]].Discard = true
+			room.Players[sumNotDiscard[0]].MsgType = "WINNER"
+			room.RoomShare.WinnerSeat = sumNotDiscard[0]
+		} else {
+			room.RoomShare.Status = "WAITING"
+			room.RoomShare.GameRound++
+		}
 	default:
 		log.Println("Unknow Room Status", room.RoomShare.Status)
 		room.RoomShare.Status = "WAITING"
@@ -103,7 +136,30 @@ func RoomStatusUpdate(room Room) Room {
 	return room
 }
 
+func roomSumRobostsNotDiscard(room Room) (seatIDs []int) {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if room.Players[i].Robot && !room.Players[i].Discard {
+			seatIDs = append(seatIDs, i)
+		}
+	}
+	return seatIDs
+}
+
+func roomSumNotDiscard(room Room) (seatIDs []int) {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if !room.Players[i].Discard && room.Players[i].Name != "UNKNOWN" {
+			seatIDs = append(seatIDs, i)
+		}
+	}
+	return seatIDs
+}
+
 func roomPlayersStartUpdate(room Room) Room {
+	room.RoomShare.Status = "START"
+	room.RoomShare.BetRound = 0
+	room.RoomShare.DefendSeat = 0
+	room.RoomShare.LostSeat = 100
+	room.RoomShare.WinnerSeat = 100
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if room.RoomShare.Players[i] != "UNKNOWN" {
 			room.Players[i].MsgType = "START"
@@ -119,7 +175,7 @@ func roomPlayersStartUpdate(room Room) Room {
 func playerCardsCompare(room Room, seat1 int, seat2 int) int {
 	log.Println("SeatID:", seat1, RoomsCards[room.RoomShare.RID][seat1].Cardsscore, RoomsCards[room.RoomShare.RID][seat1].Cards)
 	log.Println("SeatID:", seat2, RoomsCards[room.RoomShare.RID][seat2].Cardsscore, RoomsCards[room.RoomShare.RID][seat2].Cards)
-	if RoomsCards[room.RoomShare.RID][seat1].Cardsscore > RoomsCards[room.RoomShare.RID][seat2].Cardsscore {
+	if RoomsCards[room.RoomShare.RID][seat1].Cardsscore < RoomsCards[room.RoomShare.RID][seat2].Cardsscore {
 		return seat1
 	}
 	return seat2
@@ -224,7 +280,9 @@ func RoomStartSet(room RoomShare) RoomShare {
 
 func AddCardsInfo(cards Cards, rID int) Cards {
 	cards.Type = "CARDS"
+	cards.RID = rID
 	cards.CardsName = "jhCards"
+	cards.GameRound = Rooms[rID].RoomShare.GameRound
 
 	RoomsCards[rID] = util.GetPlayersCards(50000012, 9)
 

@@ -125,8 +125,7 @@ func roomServe(chPlayer chan rserve.Player) {
 	var t [rserve.VOL_ROOM_MAX]*time.Timer
 	var cards rserve.Cards
 
-	sendMap := make(map[string]interface{})
-	delay := 5 * time.Second
+	delay := 6 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -144,18 +143,26 @@ func roomServe(chPlayer chan rserve.Player) {
 
 			continue
 		case <-t[0].C:
-			for k := range sendMap {
-				delete(sendMap, k)
-			}
 			rserve.Rooms[0] = rserve.RoomStatusUpdate(rserve.Rooms[0])
 			msgMapSend(roomShareStructToMap(rserve.Rooms[0].RoomShare))
 
 			if rserve.Rooms[0].RoomShare.Status == "START" {
 				cards = rserve.AddCardsInfo(cards, rserve.Rooms[0].RoomShare.RID)
-				cards.RID = 0
-				cards.GameRound = rserve.Rooms[0].RoomShare.GameRound
-				// rserve.RoomsCards[rserve.Rooms[0].RoomShare.RID] = cards
 				msgMapSend(cardsStructToMap(cards))
+			}
+			if rserve.Rooms[0].RoomShare.Status == "BETTING" {
+				if rserve.Rooms[0].RoomShare.LostSeat < rserve.ROOM_PLAYERS_MAX {
+					<-time.After(time.Second * 1)
+					msgMapSend(playerStructToMap(rserve.Rooms[0].Players[rserve.Rooms[0].RoomShare.LostSeat]))
+					rserve.Rooms[0].RoomShare.LostSeat = 100 // reset
+				}
+			}
+			if rserve.Rooms[0].RoomShare.Status == "SETTLE" {
+				if rserve.Rooms[0].RoomShare.WinnerSeat < rserve.ROOM_PLAYERS_MAX {
+					<-time.After(time.Second * 1)
+					msgMapSend(playerStructToMap(rserve.Rooms[0].Players[rserve.Rooms[0].RoomShare.WinnerSeat]))
+					rserve.Rooms[0].RoomShare.WinnerSeat = 100 // reset
+				}
 			}
 
 			log.Println("T0 message, interval:", delay)
@@ -168,7 +175,6 @@ func roomServe(chPlayer chan rserve.Player) {
 			// t[2].Reset(delay)
 		}
 	}
-
 }
 
 func msgMapSend(msgMap map[string]interface{}) {
@@ -234,8 +240,8 @@ func mapToStructCards(m map[string]interface{}) (rserve.Cards, bool) {
 func roomShareStructToMap(roomShare rserve.RoomShare) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
-	tmprec, _ := json.Marshal(&roomShare)
-	json.Unmarshal(tmprec, &tempMap)
+	temp, _ := json.Marshal(&roomShare)
+	json.Unmarshal(temp, &tempMap)
 
 	return tempMap
 }
@@ -243,8 +249,8 @@ func roomShareStructToMap(roomShare rserve.RoomShare) map[string]interface{} {
 func playerStructToMap(player rserve.Player) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
-	tmprec, _ := json.Marshal(&player)
-	json.Unmarshal(tmprec, &tempMap)
+	temp, _ := json.Marshal(&player)
+	json.Unmarshal(temp, &tempMap)
 
 	return tempMap
 }
@@ -252,8 +258,8 @@ func playerStructToMap(player rserve.Player) map[string]interface{} {
 func cardsStructToMap(cards rserve.Cards) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
-	tmprec, _ := json.Marshal(&cards)
-	json.Unmarshal(tmprec, &tempMap)
+	temp, _ := json.Marshal(&cards)
+	json.Unmarshal(temp, &tempMap)
 
 	return tempMap
 }
