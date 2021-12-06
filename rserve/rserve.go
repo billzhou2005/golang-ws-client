@@ -25,6 +25,7 @@ type RoomShare struct {
 	Status      string `json:"status"`
 	GameRound   int    `json:"gameRound"`
 	BetRound    int    `json:"betRound"`
+	FocusID     int    `json:"focusID"`
 	BaseVol     int    `json:"baseVol"`
 	TotalAmount int    `json:"totalAmount"`
 	LostSeat    int    `json:"lostSeat"`
@@ -41,6 +42,7 @@ type Player struct {
 	Name      string       `json:"name"`
 	SeatID    int          `json:"seatID"`
 	SeatDID   int          `json:"seatDID"`
+	BetRound  int          `json:"betRound"`
 	Focus     bool         `json:"focus"`
 	CheckCard bool         `json:"checkCard"`
 	Discard   bool         `json:"discard"`
@@ -91,7 +93,6 @@ func RoomStatusUpdate(room Room) Room {
 	case "START":
 		room.RoomShare.Status = "BETTING"
 	case "BETTING":
-		room.RoomShare.BetRound++
 
 		sumNotDiscard := roomSumNotDiscard(room)
 		if len(sumNotDiscard) == 2 {
@@ -119,6 +120,7 @@ func RoomStatusUpdate(room Room) Room {
 			room.RoomShare.LostSeat = lostSeat
 			room.RoomShare.Status = "BETTING"
 		}
+		room.RoomShare.BetRound++
 	case "SETTLE":
 		sumNotDiscard := roomSumNotDiscard(room)
 		if len(sumNotDiscard) == 1 {
@@ -158,13 +160,6 @@ func roomSumNotDiscard(room Room) (seatIDs []int) {
 
 func roomPlayersStartUpdate(room Room) Room {
 	room.RoomsCards = util.GetPlayersCards(50000012, ROOM_PLAYERS_MAX)
-
-	room.RoomShare.Status = "START"
-	room.RoomShare.BetRound = 0
-	room.RoomShare.TotalAmount = 0
-	room.RoomShare.DefendSeat = room.RoomShare.WinnerSeat
-	room.RoomShare.LostSeat = 100
-	room.RoomShare.WinnerSeat = 100
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if room.Players[i].Name != "UNKNOWN" {
 			if room.Players[i].Balance < room.RoomShare.BaseVol {
@@ -184,6 +179,26 @@ func roomPlayersStartUpdate(room Room) Room {
 		}
 	}
 
+	room.RoomShare.Status = "START"
+	room.RoomShare.BetRound = 0
+	room.RoomShare.TotalAmount = 0
+	room.RoomShare.DefendSeat = room.RoomShare.WinnerSeat
+	room.RoomShare.FocusID = 0
+
+	f := room.RoomShare.DefendSeat
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		f++
+		if f >= ROOM_PLAYERS_MAX {
+			f = 0
+		}
+		if room.Players[f].Name != "UNKNOWN" && !room.Players[i].Discard {
+			room.Players[f].Focus = true
+			room.RoomShare.FocusID = f
+			break
+		}
+	}
+	room.RoomShare.LostSeat = 100
+	room.RoomShare.WinnerSeat = 100
 	return room
 }
 
