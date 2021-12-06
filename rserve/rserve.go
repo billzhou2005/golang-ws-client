@@ -84,19 +84,35 @@ func RoomStatusUpdate(room Room) Room {
 	switch room.RoomShare.Status {
 	case "WAITING":
 		room.RoomShare.Status = "START"
+		room.RoomShare.BetRound = 0
+		room.RoomShare.DefendSeat = 0
+		roomPlayersStartUpdate(room)
 	case "START":
 		room.RoomShare.Status = "BETTING"
-		room.RoomShare.GameRound++
 	case "BETTING":
+		room.RoomShare.BetRound++
 		room.RoomShare.Status = "SETTLE"
-
-	case "SETTLE":
 		playerCardsCompare(room, 0, 1)
+	case "SETTLE":
 		room.RoomShare.Status = "WAITING"
+		room.RoomShare.GameRound++
 	default:
 		log.Println("Unknow Room Status", room.RoomShare.Status)
 		room.RoomShare.Status = "WAITING"
 	}
+	return room
+}
+
+func roomPlayersStartUpdate(room Room) Room {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if room.RoomShare.Players[i] != "UNKNOWN" {
+			room.Players[i].MsgType = "START"
+			room.Players[i].Discard = false
+			room.Players[i].Focus = false
+			room.Players[i].CheckCard = false
+		}
+	}
+
 	return room
 }
 
