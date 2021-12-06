@@ -143,30 +143,31 @@ func roomServe(chPlayer chan rserve.Player) {
 
 			continue
 		case <-t[0].C:
-			rserve.Rooms[0] = rserve.RoomStatusUpdate(rserve.Rooms[0])
-			msgMapSend(roomShareStructToMap(rserve.Rooms[0].RoomShare))
+			rID := 0
+			rserve.Rooms[rID] = rserve.RoomStatusUpdate(rserve.Rooms[rID])
+			msgMapSend(roomShareStructToMap(rserve.Rooms[rID].RoomShare))
 
-			if rserve.Rooms[0].RoomShare.Status == "START" {
-				cards = rserve.AddCardsInfo(cards, rserve.Rooms[0].RoomShare.RID)
+			if rserve.Rooms[rID].RoomShare.Status == "START" {
+				cards = rserve.AddCardsInfo(cards, rserve.Rooms[rID].RoomShare.RID)
 				msgMapSend(cardsStructToMap(cards))
 			}
-			if rserve.Rooms[0].RoomShare.Status == "BETTING" {
-				if rserve.Rooms[0].RoomShare.LostSeat < rserve.ROOM_PLAYERS_MAX {
+			if rserve.Rooms[rID].RoomShare.Status == "BETTING" {
+				if rserve.Rooms[rID].RoomShare.LostSeat < rserve.ROOM_PLAYERS_MAX {
 					<-time.After(time.Second * 1)
-					msgMapSend(playerStructToMap(rserve.Rooms[0].Players[rserve.Rooms[0].RoomShare.LostSeat]))
-					rserve.Rooms[0].RoomShare.LostSeat = 100 // reset
+					msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.LostSeat]))
+					rserve.Rooms[rID].RoomShare.LostSeat = 100 // reset
 				}
 			}
-			if rserve.Rooms[0].RoomShare.Status == "SETTLE" {
-				if rserve.Rooms[0].RoomShare.WinnerSeat < rserve.ROOM_PLAYERS_MAX {
+			if rserve.Rooms[rID].RoomShare.Status == "SETTLE" {
+				if rserve.Rooms[rID].RoomShare.WinnerSeat < rserve.ROOM_PLAYERS_MAX {
 					<-time.After(time.Second * 1)
-					msgMapSend(playerStructToMap(rserve.Rooms[0].Players[rserve.Rooms[0].RoomShare.WinnerSeat]))
-					rserve.Rooms[0].RoomShare.WinnerSeat = 100 // reset
+					msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.WinnerSeat]))
+					rserve.Rooms[rID].RoomShare.WinnerSeat = 100 // reset
 				}
 			}
 
 			log.Println("T0 message, interval:", delay)
-			t[0].Reset(delay)
+			t[rID].Reset(delay)
 		case <-t[1].C:
 			log.Println("T1 message, interval:", delay)
 			// t[1].Reset(delay)

@@ -11,27 +11,27 @@ const VOL_ROOM_MAX int = 3
 const ROOM_PLAYERS_MAX int = 9
 
 var Rooms [VOL_ROOM_MAX]Room
-var RoomsCards [VOL_ROOM_MAX][ROOM_PLAYERS_MAX]util.Player
 
 type Room struct {
-	Activated bool      `json:"activated"`
-	RoomShare RoomShare `json:"roomShare"`
-	Players   [9]Player `json:"players"`
+	Activated  bool                          `json:"activated"`
+	RoomShare  RoomShare                     `json:"roomShare"`
+	Players    [ROOM_PLAYERS_MAX]Player      `json:"players"`
+	RoomsCards [ROOM_PLAYERS_MAX]util.Player `json:"roomCards"`
 }
 
 type RoomShare struct {
-	Type       string    `json:"type"`
-	RID        int       `json:"rID"`
-	Status     string    `json:"status"`
-	GameRound  int       `json:"gameRound"`
-	BetRound   int       `json:"betRound"`
-	LostSeat   int       `json:"lostSeat"`
-	WinnerSeat int       `json:"winnerSeat"`
-	DefendSeat int       `json:"defendSeat"`
-	Focuses    [9]bool   `json:"focuses"`
-	Players    [9]string `json:"players"`
-	Balances   [9]int    `json:"balances"`
-	Reserve    string    `json:"reserve"`
+	Type       string                   `json:"type"`
+	RID        int                      `json:"rID"`
+	Status     string                   `json:"status"`
+	GameRound  int                      `json:"gameRound"`
+	BetRound   int                      `json:"betRound"`
+	LostSeat   int                      `json:"lostSeat"`
+	WinnerSeat int                      `json:"winnerSeat"`
+	DefendSeat int                      `json:"defendSeat"`
+	Focuses    [ROOM_PLAYERS_MAX]bool   `json:"focuses"`
+	Players    [ROOM_PLAYERS_MAX]string `json:"players"`
+	Balances   [ROOM_PLAYERS_MAX]int    `json:"balances"`
+	Reserve    string                   `json:"reserve"`
 }
 
 type Player struct {
@@ -52,14 +52,14 @@ type Player struct {
 }
 
 type Cards struct {
-	Type        string    `json:"type"`
-	CardsName   string    `json:"cardsName"`
-	RID         int       `json:"rID"`
-	GameRound   int       `json:"gameRound"`
-	CardsPoints [27]int   `json:"cardsPoints"`
-	CardsSuits  [27]int   `json:"cardsSuits"`
-	CardsTypes  [9]string `json:"cardsTypes"`
-	Reserve     string    `json:"reserve"`
+	Type        string                    `json:"type"`
+	CardsName   string                    `json:"cardsName"`
+	RID         int                       `json:"rID"`
+	GameRound   int                       `json:"gameRound"`
+	CardsPoints [3 * ROOM_PLAYERS_MAX]int `json:"cardsPoints"`
+	CardsSuits  [3 * ROOM_PLAYERS_MAX]int `json:"cardsSuits"`
+	CardsTypes  [ROOM_PLAYERS_MAX]string  `json:"cardsTypes"`
+	Reserve     string                    `json:"reserve"`
 }
 
 func init() {
@@ -173,9 +173,9 @@ func roomPlayersStartUpdate(room Room) Room {
 }
 
 func playerCardsCompare(room Room, seat1 int, seat2 int) int {
-	log.Println("SeatID:", seat1, RoomsCards[room.RoomShare.RID][seat1].Cardsscore, RoomsCards[room.RoomShare.RID][seat1].Cards)
-	log.Println("SeatID:", seat2, RoomsCards[room.RoomShare.RID][seat2].Cardsscore, RoomsCards[room.RoomShare.RID][seat2].Cards)
-	if RoomsCards[room.RoomShare.RID][seat1].Cardsscore < RoomsCards[room.RoomShare.RID][seat2].Cardsscore {
+	log.Println("SeatID:", seat1, room.RoomsCards[seat1].Cardsscore, room.RoomsCards[seat1].Cards)
+	log.Println("SeatID:", seat2, room.RoomsCards[seat2].Cardsscore, room.RoomsCards[seat2].Cards)
+	if room.RoomsCards[seat1].Cardsscore < room.RoomsCards[seat2].Cardsscore {
 		return seat1
 	}
 	return seat2
@@ -284,17 +284,17 @@ func AddCardsInfo(cards Cards, rID int) Cards {
 	cards.CardsName = "jhCards"
 	cards.GameRound = Rooms[rID].RoomShare.GameRound
 
-	RoomsCards[rID] = util.GetPlayersCards(50000012, 9)
+	Rooms[rID].RoomsCards = util.GetPlayersCards(50000012, ROOM_PLAYERS_MAX)
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		cards.CardsTypes[i] = RoomsCards[rID][i].Cardstype
+		cards.CardsTypes[i] = Rooms[rID].RoomsCards[i].Cardstype
 		for j := 0; j < 3; j++ {
-			cards.CardsPoints[3*i+j] = RoomsCards[rID][i].Cards[j].Points
-			cards.CardsSuits[3*i+j] = RoomsCards[rID][i].Cards[j].Suits
+			cards.CardsPoints[3*i+j] = Rooms[rID].RoomsCards[i].Cards[j].Points
+			cards.CardsSuits[3*i+j] = Rooms[rID].RoomsCards[i].Cards[j].Suits
 		}
 	}
 
-	log.Println("Room cards update, rID:", rID, RoomsCards[rID])
+	log.Println("Room cards update, rID:", rID, Rooms[rID].RoomsCards)
 	return cards
 }
 
@@ -367,7 +367,7 @@ func playerCheckCards(room RoomShare) RoomShare {
 			room.Focuses[i] = true
 			break
 		}
-		if i == 9 {
+		if i == ROOM_PLAYERS_MAX {
 			log.Println("Player not found in func: playerCheckCards")
 		}
 	}
