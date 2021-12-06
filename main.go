@@ -105,10 +105,10 @@ func receiveJsonHandler(connection *websocket.Conn) {
 			}
 		case "ROOM":
 			room, isOk := mapToStructRoomMsg(rcvMsg)
-			log.Println("RoomShare is:", isOk, room)
+			log.Println("RoomShare Sent:", isOk, room)
 		case "CARDS":
 			cards, isOk := mapToStructCards(rcvMsg)
-			log.Println("Cards is:", isOk, cards)
+			log.Println("Cards Sent:", isOk, cards)
 		default:
 			log.Println("Not room/player/cards json", rcvMsg)
 		}
@@ -123,8 +123,6 @@ func receiveJsonHandler(connection *websocket.Conn) {
 
 func roomServe(chPlayer chan rserve.Player) {
 	var t [rserve.VOL_ROOM_MAX]*time.Timer
-	var cards rserve.Cards
-
 	delay := 6 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
@@ -147,25 +145,7 @@ func roomServe(chPlayer chan rserve.Player) {
 			rserve.Rooms[rID] = rserve.RoomStatusUpdate(rserve.Rooms[rID])
 			msgMapSend(roomShareStructToMap(rserve.Rooms[rID].RoomShare))
 
-			if rserve.Rooms[rID].RoomShare.Status == "START" {
-				cards = rserve.AddCardsInfo(cards, rserve.Rooms[rID].RoomShare.RID)
-				<-time.After(time.Millisecond * 300)
-				msgMapSend(cardsStructToMap(cards))
-			}
-			if rserve.Rooms[rID].RoomShare.Status == "BETTING" {
-				if rserve.Rooms[rID].RoomShare.LostSeat < rserve.ROOM_PLAYERS_MAX {
-					<-time.After(time.Second * 1)
-					msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.LostSeat]))
-					rserve.Rooms[rID].RoomShare.LostSeat = 100 // reset
-				}
-			}
-			if rserve.Rooms[rID].RoomShare.Status == "SETTLE" {
-				if rserve.Rooms[rID].RoomShare.WinnerSeat < rserve.ROOM_PLAYERS_MAX {
-					<-time.After(time.Second * 1)
-					msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.WinnerSeat]))
-					rserve.Rooms[rID].RoomShare.WinnerSeat = 100 // reset
-				}
-			}
+			roomMsgSendingProcess(rID)
 
 			log.Println("T0 message, interval:", delay)
 			t[rID].Reset(delay)
@@ -176,6 +156,39 @@ func roomServe(chPlayer chan rserve.Player) {
 			log.Println("T2 message, interval:", delay)
 			// t[2].Reset(delay)
 		}
+	}
+}
+
+func roomMsgSendingProcess(rID int) {
+	var cards rserve.Cards
+
+	switch rserve.Rooms[rID].RoomShare.Status {
+	case "START":
+		cards = rserve.AddCardsInfo(cards, rserve.Rooms[rID].RoomShare.RID)
+		<-time.After(time.Millisecond * 450)
+		msgMapSend(cardsStructToMap(cards))
+
+		for i := 0; i < rserve.ROOM_PLAYERS_MAX; i++ {
+			if rserve.Rooms[rID].Players[i].Name != "UNKNOWN" && !rserve.Rooms[rID].Players[i].Discard {
+				<-time.After(time.Millisecond * 350)
+				msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[i]))
+			}
+		}
+
+	case "BETTING":
+		if rserve.Rooms[rID].RoomShare.LostSeat < rserve.ROOM_PLAYERS_MAX {
+			<-time.After(time.Millisecond * 500)
+			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.LostSeat]))
+			rserve.Rooms[rID].RoomShare.LostSeat = 100 // reset
+		}
+	case "SETTLE":
+		if rserve.Rooms[rID].RoomShare.WinnerSeat < rserve.ROOM_PLAYERS_MAX {
+			<-time.After(time.Millisecond * 500)
+			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.WinnerSeat]))
+			rserve.Rooms[rID].RoomShare.WinnerSeat = 100 // reset
+		}
+	default:
+		log.Println("No message sending", rserve.Rooms[rID].RoomShare.Status)
 	}
 }
 

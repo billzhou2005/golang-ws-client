@@ -20,18 +20,20 @@ type Room struct {
 }
 
 type RoomShare struct {
-	Type       string                   `json:"type"`
-	RID        int                      `json:"rID"`
-	Status     string                   `json:"status"`
-	GameRound  int                      `json:"gameRound"`
-	BetRound   int                      `json:"betRound"`
-	LostSeat   int                      `json:"lostSeat"`
-	WinnerSeat int                      `json:"winnerSeat"`
-	DefendSeat int                      `json:"defendSeat"`
-	Focuses    [ROOM_PLAYERS_MAX]bool   `json:"focuses"`
-	Players    [ROOM_PLAYERS_MAX]string `json:"players"`
-	Balances   [ROOM_PLAYERS_MAX]int    `json:"balances"`
-	Reserve    string                   `json:"reserve"`
+	Type        string                   `json:"type"`
+	RID         int                      `json:"rID"`
+	Status      string                   `json:"status"`
+	GameRound   int                      `json:"gameRound"`
+	BetRound    int                      `json:"betRound"`
+	BaseVol     int                      `json:"baseVol"`
+	TotalAmount int                      `json:"totalAmount"`
+	LostSeat    int                      `json:"lostSeat"`
+	WinnerSeat  int                      `json:"winnerSeat"`
+	DefendSeat  int                      `json:"defendSeat"`
+	Focuses     [ROOM_PLAYERS_MAX]bool   `json:"focuses"`
+	Players     [ROOM_PLAYERS_MAX]string `json:"players"`
+	Balances    [ROOM_PLAYERS_MAX]int    `json:"balances"`
+	Reserve     string                   `json:"reserve"`
 }
 
 type Player struct {
@@ -70,6 +72,7 @@ func init() {
 		Rooms[i].RoomShare.Status = "WAITING"
 		Rooms[i].RoomShare.GameRound = 0
 		Rooms[i].RoomShare.BetRound = 0
+		Rooms[i].RoomShare.BaseVol = 10000
 		Rooms[i].RoomShare.DefendSeat = 0
 		Rooms[i].RoomShare.Reserve = "TBD"
 		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
@@ -155,12 +158,22 @@ func roomSumNotDiscard(room Room) (seatIDs []int) {
 func roomPlayersStartUpdate(room Room) Room {
 	room.RoomShare.Status = "START"
 	room.RoomShare.BetRound = 0
+	room.RoomShare.TotalAmount = 0
 	room.RoomShare.DefendSeat = 0
 	room.RoomShare.LostSeat = 100
 	room.RoomShare.WinnerSeat = 100
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if room.RoomShare.Players[i] != "UNKNOWN" {
-			room.Players[i].MsgType = "START"
+			if room.Players[i].Balance < room.RoomShare.BaseVol {
+				room.Players[i].MsgType = "UNDERFUNDED"
+				room.Players[i].Discard = true
+			} else {
+				room.Players[i].MsgType = "START"
+				room.Players[i].Discard = false
+				room.Players[i].Balance -= room.RoomShare.BaseVol
+				room.RoomShare.TotalAmount += room.RoomShare.BaseVol
+			}
+
 			room.Players[i].Discard = false
 			room.Players[i].Focus = false
 			room.Players[i].CheckCard = false
