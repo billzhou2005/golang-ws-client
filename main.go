@@ -149,6 +149,7 @@ func roomServe(chPlayer chan rserve.Player) {
 
 			if rserve.Rooms[rID].RoomShare.Status == "START" {
 				cards = rserve.AddCardsInfo(cards, rserve.Rooms[rID].RoomShare.RID)
+				<-time.After(time.Millisecond * 300)
 				msgMapSend(cardsStructToMap(cards))
 			}
 			if rserve.Rooms[rID].RoomShare.Status == "BETTING" {

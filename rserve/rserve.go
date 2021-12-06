@@ -96,7 +96,6 @@ func RoomStatusUpdate(room Room) Room {
 		room.RoomShare.BetRound++
 
 		sumNotDiscard := roomSumNotDiscard(room)
-		log.Println("sumNotDiscard", sumNotDiscard)
 		if len(sumNotDiscard) == 2 {
 			lostSeat := playerCardsCompare(room, sumNotDiscard[0], sumNotDiscard[1])
 			room.Players[lostSeat].Discard = true
@@ -111,7 +110,6 @@ func RoomStatusUpdate(room Room) Room {
 			log.Println("Room info:")
 			log.Println(string(b)) */
 		robotSeatIDs := roomSumRobostsNotDiscard(room)
-		log.Println("robotSeatIDs", robotSeatIDs)
 		if len(robotSeatIDs) > 2 {
 			lostSeat := playerCardsCompare(room, robotSeatIDs[0], robotSeatIDs[1])
 			room.Players[lostSeat].Discard = true
@@ -173,8 +171,6 @@ func roomPlayersStartUpdate(room Room) Room {
 }
 
 func playerCardsCompare(room Room, seat1 int, seat2 int) int {
-	log.Println("SeatID:", seat1, room.RoomsCards[seat1].Cardsscore, room.RoomsCards[seat1].Cards)
-	log.Println("SeatID:", seat2, room.RoomsCards[seat2].Cardsscore, room.RoomsCards[seat2].Cards)
 	if room.RoomsCards[seat1].Cardsscore < room.RoomsCards[seat2].Cardsscore {
 		return seat1
 	}
@@ -294,7 +290,6 @@ func AddCardsInfo(cards Cards, rID int) Cards {
 		}
 	}
 
-	log.Println("Room cards update, rID:", rID, Rooms[rID].RoomsCards)
 	return cards
 }
 
