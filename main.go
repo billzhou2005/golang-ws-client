@@ -123,7 +123,7 @@ func receiveJsonHandler(connection *websocket.Conn) {
 
 func roomServe(chPlayer chan rserve.Player) {
 	var t [rserve.VOL_ROOM_MAX]*time.Timer
-	delay := 6 * time.Second
+	delay := 3 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -160,14 +160,8 @@ func roomServe(chPlayer chan rserve.Player) {
 }
 
 func roomMsgSendingProcess(rID int) {
-	var cards rserve.Cards
-
 	switch rserve.Rooms[rID].RoomShare.Status {
 	case "START":
-		cards = rserve.AddCardsInfo(cards, rserve.Rooms[rID].RoomShare.RID)
-		<-time.After(time.Millisecond * 450)
-		msgMapSend(cardsStructToMap(cards))
-
 		for i := 0; i < rserve.ROOM_PLAYERS_MAX; i++ {
 			if rserve.Rooms[rID].Players[i].Name != "UNKNOWN" && !rserve.Rooms[rID].Players[i].Discard {
 				<-time.After(time.Millisecond * 350)
@@ -270,6 +264,7 @@ func playerStructToMap(player rserve.Player) map[string]interface{} {
 	return tempMap
 }
 
+/*
 func cardsStructToMap(cards rserve.Cards) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
@@ -278,3 +273,4 @@ func cardsStructToMap(cards rserve.Cards) map[string]interface{} {
 
 	return tempMap
 }
+*/
