@@ -264,6 +264,13 @@ func roomSumNotDiscard(room Room) (seatIDs []int) {
 }
 
 func roomUpdateFocus(room Room, focus int) Room {
+	nd := roomSumNotDiscard(room)
+	if len(nd) < 2 {
+		log.Println("Less than 2 players, no need update focus")
+		return room
+	}
+
+	room.Players[focus].Focus = false
 
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		focus++
