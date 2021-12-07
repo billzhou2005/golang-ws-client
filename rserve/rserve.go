@@ -129,30 +129,10 @@ func RoomStatusUpdate(room Room) Room {
 		room = roomUpdateFocus(room, room.RoomShare.DefendSeat)
 	case "BETTING":
 		room = roomUpdateFocus(room, room.RoomShare.FocusID)
-		/*
-			sumNotDiscard := roomSumNotDiscard(room)
-			if len(sumNotDiscard) == 2 {
-				room.Players[sumNotDiscard[0]].Balance -= 100000
-				room.RoomShare.TotalAmount += 100000
-				room.Players[sumNotDiscard[1]].Balance -= 100000
-				room.RoomShare.TotalAmount += 100000
-				lostSeat := playerCardsCompare(room, sumNotDiscard[0], sumNotDiscard[1])
-				room.Players[lostSeat].Discard = true
-				room.Players[lostSeat].MsgType = "LOST"
-				room.RoomShare.LostSeat = lostSeat
-			}
-			if len(sumNotDiscard) == 1 {
-				room.RoomShare.Status = "SETTLE"
-			}
-			robotSeatIDs := roomSumRobostsNotDiscard(room)
-			if len(robotSeatIDs) > 2 {
-				lostSeat := playerCardsCompare(room, robotSeatIDs[0], robotSeatIDs[1])
-				room.Players[lostSeat].Discard = true
-				room.Players[lostSeat].MsgType = "LOST"
-				room.RoomShare.LostSeat = lostSeat
-				room.RoomShare.Status = "BETTING"
-			}
-			room.RoomShare.BetRound++ */
+		sumNotDiscard := roomSumNotDiscard(room)
+		if len(sumNotDiscard) == 1 {
+			room.RoomShare.Status = "SETTLE"
+		}
 	case "SETTLE":
 		sumNotDiscard := roomSumNotDiscard(room)
 		if len(sumNotDiscard) == 1 {
@@ -174,6 +154,7 @@ func RoomStatusUpdate(room Room) Room {
 
 func PlayerRobotProcess(room Room) Room {
 	focusID := room.RoomShare.FocusID
+	room.Players[focusID].MsgType = "BETTING"
 	if !room.Players[focusID].Robot {
 		return room
 	}
@@ -220,41 +201,48 @@ func PlayerRobotProcess(room Room) Room {
 	default:
 		log.Println("Invalid room.RoomsCards[focusID].Cardsscore")
 	}
-
 	room.Players[focusID].BetRound++
 	return room
 }
 
 func playerCompareRequest(requestID int, room Room) (bool, Room) {
 	nd := roomSumNotDiscard(room)
-	log.Println("roomSumNotDiscard", nd)
+	if len(nd) < 2 {
+		log.Println("Less than 2 players, no need compare")
+		return false, room
+	}
+
+	index := 0
 	for i := 0; i < len(nd); i++ {
-		testPrintJson(room.Players[nd[i]])
-	}
-	log.Println("playerCompare requestID", requestID)
-	compareID := requestID
-	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if compareID > 0 {
-			compareID--
-		} else {
-			compareID = 8
-		}
-		if !room.Players[compareID].Discard && room.Players[compareID].Name != "UNKNOWN" && room.Players[compareID].BetRound > room.Players[requestID].BetRound && compareID != requestID {
-			if room.RoomsCards[requestID].Cardsscore > room.RoomsCards[compareID].Cardsscore {
-				room.Players[compareID].Discard = true
-				room.Players[compareID].MsgType = "COMPARED"
-				room.Players[requestID].MsgType = "BETTING"
-			} else {
-				room.Players[requestID].Discard = true
-				room.Players[requestID].MsgType = "COMPARED"
-				room.Players[compareID].MsgType = "BETTING"
-			}
-			room.RoomShare.CompareID = compareID
-			return true, room
+		if requestID == nd[i] {
+			index = i
 		}
 	}
-	log.Println("playerCompareRequest: false")
-	return false, room
+	index--
+	if index < 0 {
+		index = len(nd) - 1
+	}
+	compareID := nd[index]
+
+	if room.Players[compareID].BetRound == 0 {
+		log.Println("Can't compare to Defender")
+		return false, room
+	}
+
+	if room.RoomsCards[requestID].Cardsscore > room.RoomsCards[compareID].Cardsscore {
+		room.Players[compareID].Discard = true
+		room.Players[compareID].MsgType = "LOST"
+		room.Players[requestID].MsgType = "BETTING"
+		log.Println("playerCompare compareID discard:", compareID)
+	} else {
+		room.Players[requestID].Discard = true
+		room.Players[requestID].MsgType = "COMPARED"
+		room.Players[requestID].MsgType = "LOST"
+		log.Println("playerCompare requestID discard:", requestID)
+	}
+	room.RoomShare.CompareID = compareID
+
+	return true, room
 }
 
 func roomSumRobostsNotDiscard(room Room) (seatIDs []int) {
@@ -319,7 +307,7 @@ func addAutoPlayers(room Room) Room {
 	var nickName = [...]string{"流逝的风", "每天赢5千", "不好就不要", "牛牛牛009", "风清猪的", "总是输没完了", "适度就是", "无畏了吗", "见好就收", "坚持到底", "三手要比", "不勉强", "搞不懂", "吴潇无暇", "大赌棍", "一直无感", "逍遥子", "风月浪", "独善其身", "赌神"}
 	var numofp int
 
-	randomNums := generateRandomNumber(0, 19, 3)
+	randomNums := generateRandomNumber(0, 19, 9)
 
 	numofp = 0
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
@@ -329,7 +317,7 @@ func addAutoPlayers(room Room) Room {
 	}
 
 	if numofp == 0 {
-		for j := 0; j < 3; j++ {
+		for j := 0; j < 6; j++ {
 			room.Players[j].Type = "PLAYER"
 			room.Players[j].RID = room.RoomShare.RID
 			room.Players[j].PID = "xxxaaa88"
