@@ -123,7 +123,7 @@ func receiveJsonHandler(connection *websocket.Conn) {
 
 func roomServe(chPlayer chan rserve.Player) {
 	var t [rserve.VOL_ROOM_MAX]*time.Timer
-	delay := 3 * time.Second
+	delay := 12 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -164,22 +164,27 @@ func roomMsgSendingProcess(rID int) {
 	case "START":
 		for i := 0; i < rserve.ROOM_PLAYERS_MAX; i++ {
 			if rserve.Rooms[rID].Players[i].Name != "UNKNOWN" && !rserve.Rooms[rID].Players[i].Discard {
-				<-time.After(time.Millisecond * 350)
+				<-time.After(time.Millisecond * 300)
 				msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[i]))
 			}
 		}
 
 	case "BETTING":
-		if rserve.Rooms[rID].RoomShare.LostSeat < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 500)
-			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.LostSeat]))
-			rserve.Rooms[rID].RoomShare.LostSeat = 100 // reset
+		rserve.Rooms[rID] = rserve.PlayerRobotProcess(rserve.Rooms[rID])
+		log.Println("FocusID, CompareID", rserve.Rooms[rID].RoomShare.CompareID, rserve.Rooms[rID].RoomShare.FocusID)
+		if rserve.Rooms[rID].RoomShare.CompareID < rserve.ROOM_PLAYERS_MAX {
+			<-time.After(time.Millisecond * 300)
+			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.CompareID]))
+			rserve.Rooms[rID].RoomShare.CompareID = 100 // reset
+		}
+		if rserve.Rooms[rID].RoomShare.FocusID < rserve.ROOM_PLAYERS_MAX {
+			<-time.After(time.Millisecond * 300)
+			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.FocusID]))
 		}
 	case "SETTLE":
-		if rserve.Rooms[rID].RoomShare.WinnerSeat < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 500)
-			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.WinnerSeat]))
-			rserve.Rooms[rID].RoomShare.WinnerSeat = 100 // reset
+		if rserve.Rooms[rID].RoomShare.DefendSeat < rserve.ROOM_PLAYERS_MAX {
+			<-time.After(time.Millisecond * 300)
+			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.DefendSeat]))
 		}
 	default:
 		log.Println("No message sending", rserve.Rooms[rID].RoomShare.Status)

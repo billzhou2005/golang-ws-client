@@ -1,6 +1,7 @@
 package rserve
 
 import (
+	"encoding/json"
 	"golang-ws-client/util"
 	"log"
 	"math/rand"
@@ -26,10 +27,10 @@ type RoomShare struct {
 	GameRound   int    `json:"gameRound"`
 	BetRound    int    `json:"betRound"`
 	FocusID     int    `json:"focusID"`
+	CompareID   int    `json:"compareID"`
 	BaseVol     int    `json:"baseVol"`
 	TotalAmount int    `json:"totalAmount"`
 	LostSeat    int    `json:"lostSeat"`
-	WinnerSeat  int    `json:"winnerSeat"`
 	DefendSeat  int    `json:"defendSeat"`
 	Reserve     string `json:"reserve"`
 }
@@ -49,7 +50,8 @@ type Player struct {
 	BetVol    int          `json:"betVol"`
 	Balance   int          `json:"balance"`
 	Robot     bool         `json:"robot"`
-	Cards     [3]util.Card `json:"Cards"`
+	Cards     [3]util.Card `json:"cards"`
+	CardsType string       `json:"cardsType"`
 	Reserve   string       `json:"reserve"`
 }
 
@@ -72,6 +74,8 @@ func init() {
 		Rooms[i].RoomShare.Status = "WAITING"
 		Rooms[i].RoomShare.GameRound = 0
 		Rooms[i].RoomShare.BetRound = 0
+		Rooms[i].RoomShare.FocusID = 0
+		Rooms[i].RoomShare.CompareID = 100
 		Rooms[i].RoomShare.BaseVol = 10000
 		Rooms[i].RoomShare.DefendSeat = 0
 		Rooms[i].RoomShare.Reserve = "TBD"
@@ -83,79 +87,6 @@ func init() {
 	}
 
 	Rooms[0] = addAutoPlayers(Rooms[0])
-}
-
-func RoomStatusUpdate(room Room) Room {
-	log.Println(room.RoomShare.Status)
-	switch room.RoomShare.Status {
-	case "WAITING":
-		room = roomPlayersStartUpdate(room)
-	case "START":
-		room.RoomShare.Status = "BETTING"
-	case "BETTING":
-
-		sumNotDiscard := roomSumNotDiscard(room)
-		if len(sumNotDiscard) == 2 {
-			room.Players[sumNotDiscard[0]].Balance -= 100000
-			room.RoomShare.TotalAmount += 100000
-			room.Players[sumNotDiscard[1]].Balance -= 100000
-			room.RoomShare.TotalAmount += 100000
-			lostSeat := playerCardsCompare(room, sumNotDiscard[0], sumNotDiscard[1])
-			room.Players[lostSeat].Discard = true
-			room.Players[lostSeat].MsgType = "LOST"
-			room.RoomShare.LostSeat = lostSeat
-		}
-		if len(sumNotDiscard) == 1 {
-			room.RoomShare.Status = "SETTLE"
-		}
-		/*
-			b, _ := json.Marshal(room)
-			log.Println("Room info:")
-			log.Println(string(b)) */
-		robotSeatIDs := roomSumRobostsNotDiscard(room)
-		if len(robotSeatIDs) > 2 {
-			lostSeat := playerCardsCompare(room, robotSeatIDs[0], robotSeatIDs[1])
-			room.Players[lostSeat].Discard = true
-			room.Players[lostSeat].MsgType = "LOST"
-			room.RoomShare.LostSeat = lostSeat
-			room.RoomShare.Status = "BETTING"
-		}
-		room.RoomShare.BetRound++
-	case "SETTLE":
-		sumNotDiscard := roomSumNotDiscard(room)
-		if len(sumNotDiscard) == 1 {
-			room.Players[sumNotDiscard[0]].Discard = true
-			room.Players[sumNotDiscard[0]].MsgType = "WINNER"
-			room.Players[sumNotDiscard[0]].Balance += room.RoomShare.TotalAmount
-			room.RoomShare.TotalAmount = 0
-			room.RoomShare.WinnerSeat = sumNotDiscard[0]
-		} else {
-			room.RoomShare.Status = "WAITING"
-			room.RoomShare.GameRound++
-		}
-	default:
-		log.Println("Unknow Room Status", room.RoomShare.Status)
-		room.RoomShare.Status = "WAITING"
-	}
-	return room
-}
-
-func roomSumRobostsNotDiscard(room Room) (seatIDs []int) {
-	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if room.Players[i].Robot && !room.Players[i].Discard {
-			seatIDs = append(seatIDs, i)
-		}
-	}
-	return seatIDs
-}
-
-func roomSumNotDiscard(room Room) (seatIDs []int) {
-	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if !room.Players[i].Discard && room.Players[i].Name != "UNKNOWN" {
-			seatIDs = append(seatIDs, i)
-		}
-	}
-	return seatIDs
 }
 
 func roomPlayersStartUpdate(room Room) Room {
@@ -176,37 +107,190 @@ func roomPlayersStartUpdate(room Room) Room {
 			room.Players[i].Focus = false
 			room.Players[i].CheckCard = false
 			room.Players[i].Cards = room.RoomsCards[i].Cards
+			room.Players[i].CardsType = room.RoomsCards[i].Cardstype
 		}
 	}
 
 	room.RoomShare.Status = "START"
 	room.RoomShare.BetRound = 0
+	room.RoomShare.CompareID = 100
 	room.RoomShare.TotalAmount = 0
-	room.RoomShare.DefendSeat = room.RoomShare.WinnerSeat
-	room.RoomShare.FocusID = 0
-
-	f := room.RoomShare.DefendSeat
-	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		f++
-		if f >= ROOM_PLAYERS_MAX {
-			f = 0
-		}
-		if room.Players[f].Name != "UNKNOWN" && !room.Players[i].Discard {
-			room.Players[f].Focus = true
-			room.RoomShare.FocusID = f
-			break
-		}
-	}
 	room.RoomShare.LostSeat = 100
-	room.RoomShare.WinnerSeat = 100
 	return room
 }
 
-func playerCardsCompare(room Room, seat1 int, seat2 int) int {
-	if room.RoomsCards[seat1].Cardsscore < room.RoomsCards[seat2].Cardsscore {
-		return seat1
+func RoomStatusUpdate(room Room) Room {
+	log.Println(room.RoomShare.Status)
+	switch room.RoomShare.Status {
+	case "WAITING":
+		room = roomPlayersStartUpdate(room)
+	case "START":
+		room.RoomShare.Status = "BETTING"
+		room = roomUpdateFocus(room, room.RoomShare.DefendSeat)
+	case "BETTING":
+		room = roomUpdateFocus(room, room.RoomShare.FocusID)
+		/*
+			sumNotDiscard := roomSumNotDiscard(room)
+			if len(sumNotDiscard) == 2 {
+				room.Players[sumNotDiscard[0]].Balance -= 100000
+				room.RoomShare.TotalAmount += 100000
+				room.Players[sumNotDiscard[1]].Balance -= 100000
+				room.RoomShare.TotalAmount += 100000
+				lostSeat := playerCardsCompare(room, sumNotDiscard[0], sumNotDiscard[1])
+				room.Players[lostSeat].Discard = true
+				room.Players[lostSeat].MsgType = "LOST"
+				room.RoomShare.LostSeat = lostSeat
+			}
+			if len(sumNotDiscard) == 1 {
+				room.RoomShare.Status = "SETTLE"
+			}
+			robotSeatIDs := roomSumRobostsNotDiscard(room)
+			if len(robotSeatIDs) > 2 {
+				lostSeat := playerCardsCompare(room, robotSeatIDs[0], robotSeatIDs[1])
+				room.Players[lostSeat].Discard = true
+				room.Players[lostSeat].MsgType = "LOST"
+				room.RoomShare.LostSeat = lostSeat
+				room.RoomShare.Status = "BETTING"
+			}
+			room.RoomShare.BetRound++ */
+	case "SETTLE":
+		sumNotDiscard := roomSumNotDiscard(room)
+		if len(sumNotDiscard) == 1 {
+			room.Players[sumNotDiscard[0]].Discard = true
+			room.Players[sumNotDiscard[0]].MsgType = "WINNER"
+			room.Players[sumNotDiscard[0]].Balance += room.RoomShare.TotalAmount
+			room.RoomShare.TotalAmount = 0
+			room.RoomShare.DefendSeat = sumNotDiscard[0]
+		} else {
+			room.RoomShare.Status = "WAITING"
+			room.RoomShare.GameRound++
+		}
+	default:
+		log.Println("Unknow Room Status", room.RoomShare.Status)
+		room.RoomShare.Status = "WAITING"
 	}
-	return seat2
+	return room
+}
+
+func PlayerRobotProcess(room Room) Room {
+	focusID := room.RoomShare.FocusID
+	if !room.Players[focusID].Robot {
+		return room
+	}
+
+	nd := roomSumNotDiscard(room)
+	log.Println("roomSumNotDiscard", nd)
+
+	log.Println("focusID:", focusID, "cardscore:", room.RoomsCards[focusID].Cardsscore)
+	switch room.RoomsCards[focusID].Cardsscore {
+	case 8:
+		room.Players[focusID].BetVol = 3 * room.RoomShare.BaseVol
+	case 7:
+		room.Players[focusID].BetVol = 2 * room.RoomShare.BaseVol
+		if room.Players[focusID].BetRound > 3 {
+			_, room = playerCompareRequest(focusID, room)
+		}
+	case 6:
+		room.Players[focusID].BetVol = 2 * room.RoomShare.BaseVol
+		if room.Players[focusID].BetRound > 2 {
+			_, room = playerCompareRequest(focusID, room)
+		}
+	case 5:
+		room.Players[focusID].BetVol = 2 * room.RoomShare.BaseVol
+		if room.Players[focusID].BetRound > 1 {
+			_, room = playerCompareRequest(focusID, room)
+		}
+	case 4:
+		room.Players[focusID].BetVol = room.RoomShare.BaseVol
+		if room.Players[focusID].BetRound > 0 {
+			_, room = playerCompareRequest(focusID, room)
+		}
+	case 3:
+		room.Players[focusID].BetVol = room.RoomShare.BaseVol
+		if room.Players[focusID].BetRound > 0 {
+			_, room = playerCompareRequest(focusID, room)
+		}
+	case 2:
+		room.Players[focusID].BetVol = room.RoomShare.BaseVol
+		_, room = playerCompareRequest(focusID, room)
+	case 1:
+		room.Players[focusID].Discard = true
+	case 0:
+		room.Players[focusID].Discard = true
+	default:
+		log.Println("Invalid room.RoomsCards[focusID].Cardsscore")
+	}
+
+	room.Players[focusID].BetRound++
+	return room
+}
+
+func playerCompareRequest(requestID int, room Room) (bool, Room) {
+	nd := roomSumNotDiscard(room)
+	log.Println("roomSumNotDiscard", nd)
+	for i := 0; i < len(nd); i++ {
+		testPrintJson(room.Players[nd[i]])
+	}
+	log.Println("playerCompare requestID", requestID)
+	compareID := requestID
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if compareID > 0 {
+			compareID--
+		} else {
+			compareID = 8
+		}
+		if !room.Players[compareID].Discard && room.Players[compareID].Name != "UNKNOWN" && room.Players[compareID].BetRound > room.Players[requestID].BetRound && compareID != requestID {
+			if room.RoomsCards[requestID].Cardsscore > room.RoomsCards[compareID].Cardsscore {
+				room.Players[compareID].Discard = true
+				room.Players[compareID].MsgType = "COMPARED"
+				room.Players[requestID].MsgType = "BETTING"
+			} else {
+				room.Players[requestID].Discard = true
+				room.Players[requestID].MsgType = "COMPARED"
+				room.Players[compareID].MsgType = "BETTING"
+			}
+			room.RoomShare.CompareID = compareID
+			return true, room
+		}
+	}
+	log.Println("playerCompareRequest: false")
+	return false, room
+}
+
+func roomSumRobostsNotDiscard(room Room) (seatIDs []int) {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if room.Players[i].Robot && !room.Players[i].Discard {
+			seatIDs = append(seatIDs, i)
+		}
+	}
+	return seatIDs
+}
+
+func roomSumNotDiscard(room Room) (seatIDs []int) {
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if !room.Players[i].Discard && room.Players[i].Name != "UNKNOWN" {
+			seatIDs = append(seatIDs, i)
+		}
+	}
+	return seatIDs
+}
+
+func roomUpdateFocus(room Room, focus int) Room {
+
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		focus++
+		if focus >= ROOM_PLAYERS_MAX {
+			focus = 0
+		}
+		if room.Players[focus].Name != "UNKNOWN" && !room.Players[focus].Discard {
+			room.Players[focus].Focus = true
+			room.Players[focus].BetRound++
+			room.RoomShare.FocusID = focus
+			break
+		}
+	}
+
+	return room
 }
 
 func PlayerInfoProcess(player Player) (bool, Player) {
@@ -362,4 +446,8 @@ func generateRandomNumber(start int, end int, count int) []int {
 	}
 
 	return nums
+}
+func testPrintJson(j interface{}) {
+	b, _ := json.Marshal(j)
+	log.Println(string(b))
 }
