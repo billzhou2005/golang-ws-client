@@ -165,6 +165,7 @@ func RoomStatusUpdate(room Room) Room {
 			room.Players[sumNotDiscard[0]].MsgType = "WINNER"
 			room.Players[sumNotDiscard[0]].Balance += room.RoomShare.TotalAmount
 			room.RoomShare.TotalAmount = 0
+			room.RoomShare.FocusID = sumNotDiscard[0]
 			room.RoomShare.DefendSeat = sumNotDiscard[0]
 			room.RoomShare.GameRound = 0
 		} else {
