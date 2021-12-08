@@ -18,6 +18,7 @@ type Room struct {
 	RoomShare  RoomShare                     `json:"roomShare"`
 	Players    [ROOM_PLAYERS_MAX]Player      `json:"players"`
 	RoomsCards [ROOM_PLAYERS_MAX]util.Player `json:"roomCards"`
+	EnterRoom  EnterRoom                     `json:"enterRoom"`
 }
 
 type RoomShare struct {
@@ -33,6 +34,14 @@ type RoomShare struct {
 	LostSeat    int    `json:"lostSeat"`
 	DefendSeat  int    `json:"defendSeat"`
 	Reserve     string `json:"reserve"`
+}
+
+type EnterRoom struct {
+	Type     string                   `json:"type"`
+	RID      int                      `json:"rID"`
+	Players  [ROOM_PLAYERS_MAX]string `json:"players"`
+	Balances [ROOM_PLAYERS_MAX]int    `json:"balances"`
+	Discards [ROOM_PLAYERS_MAX]bool   `json:"discards"`
 }
 
 type Player struct {
@@ -86,6 +95,7 @@ func init() {
 		}
 	}
 
+	//init for room[0] debug
 	Rooms[0] = addAutoPlayers(Rooms[0])
 }
 
@@ -149,6 +159,8 @@ func RoomStatusUpdate(room Room) Room {
 		log.Println("Unknow Room Status", room.RoomShare.Status)
 		room.RoomShare.Status = "WAITING"
 	}
+
+	room = roomEnterRoomUpdate(room)
 	return room
 }
 
@@ -331,13 +343,6 @@ func addAutoPlayers(room Room) Room {
 			room.Players[j].MsgType = "ASSIGNED"
 			room.Players[j].Name = nickName[randomNums[j]]
 			room.Players[j].SeatID = j
-			if j == 3 {
-				room.Players[j].SeatDID = 5
-			} else if j == 5 {
-				room.Players[j].SeatDID = 3
-			} else {
-				room.Players[j].SeatDID = j
-			}
 			room.Players[j].Focus = false
 			room.Players[j].CheckCard = false
 			room.Players[j].Discard = true
@@ -348,6 +353,18 @@ func addAutoPlayers(room Room) Room {
 		}
 	}
 
+	room = roomEnterRoomUpdate(room)
+	return room
+}
+
+func roomEnterRoomUpdate(room Room) Room {
+	room.EnterRoom.RID = room.RoomShare.RID
+	room.EnterRoom.Type = "ENTERROOM"
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		room.EnterRoom.Players[i] = room.Players[i].Name
+		room.EnterRoom.Balances[i] = room.Players[i].Balance
+		room.EnterRoom.Discards[i] = room.Players[i].Discard
+	}
 	return room
 }
 
@@ -394,6 +411,8 @@ func deleteLeavePlayers(room Room, player Player) Room {
 	room.Players[seatID].BetVol = 0
 	room.Players[seatID].Balance = 0
 	room.Players[seatID].Robot = false
+
+	room = roomEnterRoomUpdate(room)
 	return room
 }
 

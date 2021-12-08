@@ -109,6 +109,8 @@ func receiveJsonHandler(connection *websocket.Conn) {
 		case "CARDS":
 			cards, isOk := mapToStructCards(rcvMsg)
 			log.Println("Cards Sent:", isOk, cards)
+		case "ENTERROOM":
+			log.Println("EnterRoom data Sent:", rcvMsg)
 		default:
 			log.Println("Not room/player/cards json", rcvMsg)
 		}
@@ -137,6 +139,10 @@ func roomServe(chPlayer chan rserve.Player) {
 			isOk, player := rserve.PlayerInfoProcess(player)
 			if isOk {
 				msgMapSend(playerStructToMap(player))
+			}
+			if player.MsgType == "ENTERROOM" || player.MsgType == "LEAVE" {
+				log.Println("player EnterRoom", rserve.Rooms[player.RID].EnterRoom)
+				msgMapSend(enterRoomStructToMap(rserve.Rooms[player.RID].EnterRoom))
 			}
 
 			continue
@@ -255,6 +261,15 @@ func roomShareStructToMap(roomShare rserve.RoomShare) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
 	temp, _ := json.Marshal(&roomShare)
+	json.Unmarshal(temp, &tempMap)
+
+	return tempMap
+}
+
+func enterRoomStructToMap(enterRoom rserve.EnterRoom) map[string]interface{} {
+	tempMap := make(map[string]interface{})
+
+	temp, _ := json.Marshal(&enterRoom)
 	json.Unmarshal(temp, &tempMap)
 
 	return tempMap
