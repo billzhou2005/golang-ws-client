@@ -149,6 +149,7 @@ func roomServe(chPlayer chan rserve.Player) {
 		case <-t[0].C:
 			rID := 0
 			rserve.Rooms[rID] = rserve.RoomStatusUpdate(rserve.Rooms[rID])
+			log.Println("T0-room.RoomShare", rserve.Rooms[rID].RoomShare)
 			msgMapSend(roomShareStructToMap(rserve.Rooms[rID].RoomShare))
 
 			roomMsgSendingProcess(rID)

@@ -30,7 +30,8 @@ type RoomShare struct {
 	BetRound    int    `json:"betRound"`
 	FocusID     int    `json:"focusID"`
 	CompareID   int    `json:"compareID"`
-	BaseVol     int    `json:"baseVol"`
+	MinVol      int    `json:"minVol"`
+	MaxVol      int    `json:"maxVol"`
 	TotalAmount int    `json:"totalAmount"`
 	LostSeat    int    `json:"lostSeat"`
 	DefendSeat  int    `json:"defendSeat"`
@@ -93,7 +94,8 @@ func init() {
 		Rooms[i].RoomShare.BetRound = 0
 		Rooms[i].RoomShare.FocusID = 0
 		Rooms[i].RoomShare.CompareID = 100
-		Rooms[i].RoomShare.BaseVol = 10000
+		Rooms[i].RoomShare.MinVol = 10000
+		Rooms[i].RoomShare.MaxVol = 100000
 		Rooms[i].RoomShare.DefendSeat = 0
 		Rooms[i].RoomShare.Reserve = "TBD"
 		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
@@ -109,17 +111,24 @@ func init() {
 
 func roomPlayersStartUpdate(room Room) Room {
 	room.RoomsCards = util.GetPlayersCards(50000012, ROOM_PLAYERS_MAX)
+
+	room.RoomShare.Status = "START"
+	room.RoomShare.MinVol = 10000
+	room.RoomShare.MaxVol = 100000
 	room.RoomShare.TotalAmount = 0
+	room.RoomShare.BetRound = 0
+	room.RoomShare.CompareID = 100
+	room.RoomShare.LostSeat = 100
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if room.Players[i].Name != "UNKNOWN" {
-			if room.Players[i].Balance < room.RoomShare.BaseVol {
+			if room.Players[i].Balance < room.RoomShare.MinVol {
 				room.Players[i].MsgType = "UNDERFUNDED"
 				room.Players[i].Discard = true
 			} else {
 				room.Players[i].MsgType = "START"
 				room.Players[i].Discard = false
-				room.Players[i].Balance -= room.RoomShare.BaseVol
-				room.RoomShare.TotalAmount += room.RoomShare.BaseVol
+				room.Players[i].Balance -= room.RoomShare.MinVol
+				room.RoomShare.TotalAmount += room.RoomShare.MinVol
 			}
 
 			room.Players[i].Focus = false
@@ -134,12 +143,8 @@ func roomPlayersStartUpdate(room Room) Room {
 	}
 	room.SendCards.RID = room.RoomShare.RID
 	room.SendCards.Type = "CARDS"
-
-	room.RoomShare.Status = "START"
-	room.RoomShare.BaseVol = 10000
-	room.RoomShare.BetRound = 0
-	room.RoomShare.CompareID = 100
-	room.RoomShare.LostSeat = 100
+	log.Println("roomPlayersStartUpdate")
+	testPrintJson(room.RoomShare)
 	return room
 }
 
@@ -157,6 +162,7 @@ func RoomStatusUpdate(room Room) Room {
 		room.RoomShare.GameRound++
 		if len(sumNotDiscard) == 1 {
 			room.RoomShare.Status = "SETTLE"
+			room.RoomShare.FocusID = sumNotDiscard[0]
 		}
 	case "SETTLE":
 		sumNotDiscard := roomSumNotDiscard(room)
@@ -180,7 +186,20 @@ func RoomStatusUpdate(room Room) Room {
 	return room
 }
 
+//retrun bool value true: All in
+func betVol(betVol int, max int, balance int) (int, bool) {
+	if betVol > max {
+		betVol = max
+	}
+	if betVol > balance {
+		betVol = balance
+		return betVol, true
+	}
+	return betVol, false
+}
+
 func PlayerRobotProcess(room Room) Room {
+	var allin bool
 	focusID := room.RoomShare.FocusID
 	room.Players[focusID].MsgType = "BETTING"
 	if !room.Players[focusID].Robot {
@@ -195,44 +214,71 @@ func PlayerRobotProcess(room Room) Room {
 	log.Println("focusID:", focusID, "cardscore:", room.RoomsCards[focusID].Cardsscore)
 	switch room.RoomsCards[focusID].Cardsscore {
 	case 8:
-		room.Players[focusID].BetVol = 3 * room.RoomShare.BaseVol
+		room.Players[focusID].BetVol = 3 * room.RoomShare.MinVol
+		room.Players[focusID].BetVol, allin = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
+		if allin {
+			_, room = playerCompareRequest(focusID, room)
+		}
 	case 7:
-		room.Players[focusID].BetVol = 2 * room.RoomShare.BaseVol
-		if room.Players[focusID].BetRound > 3 {
+		room.Players[focusID].BetVol = 2 * room.RoomShare.MinVol
+		room.Players[focusID].BetVol, allin = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
+		if room.Players[focusID].BetRound > 3 || allin {
 			_, room = playerCompareRequest(focusID, room)
 		}
 	case 6:
-		room.Players[focusID].BetVol = 2 * room.RoomShare.BaseVol
-		if room.Players[focusID].BetRound > 2 {
+		room.Players[focusID].BetVol = 2 * room.RoomShare.MinVol
+		room.Players[focusID].BetVol, allin = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
+		if room.Players[focusID].BetRound > 2 || allin {
 			_, room = playerCompareRequest(focusID, room)
 		}
 	case 5:
-		room.Players[focusID].BetVol = 2 * room.RoomShare.BaseVol
-		if room.Players[focusID].BetRound > 1 {
+		room.Players[focusID].BetVol = 2 * room.RoomShare.MinVol
+		room.Players[focusID].BetVol, allin = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
+		if room.Players[focusID].BetRound > 1 || allin {
 			_, room = playerCompareRequest(focusID, room)
 		}
 	case 4:
-		room.Players[focusID].BetVol = room.RoomShare.BaseVol
-		if room.Players[focusID].BetRound > 0 {
+		room.Players[focusID].BetVol = room.RoomShare.MinVol
+		room.Players[focusID].BetVol, allin = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
+		if room.Players[focusID].BetRound > 0 || allin {
 			_, room = playerCompareRequest(focusID, room)
 		}
 	case 3:
-		room.Players[focusID].BetVol = room.RoomShare.BaseVol
-		if room.Players[focusID].BetRound > 0 {
+		room.Players[focusID].BetVol = room.RoomShare.MinVol
+		room.Players[focusID].BetVol, allin = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
+		if room.Players[focusID].BetRound > 0 || allin {
 			_, room = playerCompareRequest(focusID, room)
 		}
 	case 2:
-		room.Players[focusID].BetVol = room.RoomShare.BaseVol
+		room.Players[focusID].BetVol = room.RoomShare.MinVol
+		room.Players[focusID].BetVol, _ = betVol(room.Players[focusID].BetVol, room.RoomShare.MaxVol, room.Players[focusID].Balance)
+		room.Players[focusID].Balance -= room.Players[focusID].BetVol
 		_, room = playerCompareRequest(focusID, room)
 	case 1:
 		room.Players[focusID].Discard = true
+		room.Players[focusID].BetVol = 0
+		room.Players[focusID].MsgType = "LOST"
 	case 0:
 		room.Players[focusID].Discard = true
+		room.Players[focusID].BetVol = 0
+		room.Players[focusID].MsgType = "LOST"
 	default:
 		log.Println("Invalid room.RoomsCards[focusID].Cardsscore")
 	}
 	room.RoomShare.TotalAmount += room.Players[focusID].BetVol
-	room.RoomShare.BaseVol = room.Players[focusID].BetVol
+	if room.Players[focusID].BetVol > 0 {
+		room.RoomShare.MinVol = room.Players[focusID].BetVol
+	}
+
+	log.Println("room.Players[focusID].BetVol", room.Players[focusID].BetVol)
+	log.Println("room.RoomShare.TotalAmount", room.RoomShare.TotalAmount)
+
 	room.Players[focusID].BetRound++
 	return room
 }
@@ -264,13 +310,13 @@ func playerCompareRequest(requestID int, room Room) (bool, Room) {
 	if room.RoomsCards[requestID].Cardsscore > room.RoomsCards[compareID].Cardsscore {
 		room.Players[compareID].Discard = true
 		room.Players[compareID].MsgType = "LOST"
-		room.Players[requestID].MsgType = "BETTING"
-		log.Println("playerCompare compareID discard:", compareID)
+		room.Players[requestID].MsgType = "COMPARED"
+		log.Println("LOST Player:", room.Players[compareID].Name)
 	} else {
 		room.Players[requestID].Discard = true
-		room.Players[requestID].MsgType = "COMPARED"
 		room.Players[requestID].MsgType = "LOST"
-		log.Println("playerCompare requestID discard:", requestID)
+		room.Players[compareID].MsgType = "COMPARED"
+		log.Println("LOST Player:", room.Players[requestID].Name)
 	}
 	room.RoomShare.CompareID = compareID
 
