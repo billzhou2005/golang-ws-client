@@ -331,6 +331,13 @@ func addAutoPlayers(room Room) Room {
 			room.Players[j].MsgType = "ASSIGNED"
 			room.Players[j].Name = nickName[randomNums[j]]
 			room.Players[j].SeatID = j
+			if j == 3 {
+				room.Players[j].SeatDID = 5
+			} else if j == 5 {
+				room.Players[j].SeatDID = 3
+			} else {
+				room.Players[j].SeatDID = j
+			}
 			room.Players[j].Focus = false
 			room.Players[j].CheckCard = false
 			room.Players[j].Discard = true

@@ -164,7 +164,7 @@ func roomMsgSendingProcess(rID int) {
 	case "START":
 		for i := 0; i < rserve.ROOM_PLAYERS_MAX; i++ {
 			if rserve.Rooms[rID].Players[i].Name != "UNKNOWN" && !rserve.Rooms[rID].Players[i].Discard {
-				<-time.After(time.Millisecond * 800)
+				<-time.After(time.Millisecond * 500)
 				msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[i]))
 			}
 		}
@@ -173,12 +173,12 @@ func roomMsgSendingProcess(rID int) {
 		rserve.Rooms[rID] = rserve.PlayerRobotProcess(rserve.Rooms[rID])
 		log.Println("FocusID, CompareID", rserve.Rooms[rID].RoomShare.CompareID, rserve.Rooms[rID].RoomShare.FocusID)
 		if rserve.Rooms[rID].RoomShare.CompareID < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 800)
+			<-time.After(time.Millisecond * 600)
 			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.CompareID]))
 			rserve.Rooms[rID].RoomShare.CompareID = 100 // reset
 		}
 		if rserve.Rooms[rID].RoomShare.FocusID < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 800)
+			<-time.After(time.Millisecond * 600)
 			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.FocusID]))
 		}
 	case "SETTLE":
