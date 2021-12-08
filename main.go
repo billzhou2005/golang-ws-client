@@ -107,10 +107,10 @@ func receiveJsonHandler(connection *websocket.Conn) {
 			room, isOk := mapToStructRoomMsg(rcvMsg)
 			log.Println("RoomShare Sent:", isOk, room)
 		case "CARDS":
-			cards, isOk := mapToStructCards(rcvMsg)
-			log.Println("Cards Sent:", isOk, cards)
-		case "ENTERROOM":
-			log.Println("EnterRoom data Sent:", rcvMsg)
+			// cards, isOk := mapToStructCards(rcvMsg)
+			log.Println("CARDS Sent", rcvMsg)
+		case "INITROOM":
+			log.Println("InitRoom data Sent:", rcvMsg)
 		default:
 			log.Println("Not room/player/cards json", rcvMsg)
 		}
@@ -140,9 +140,9 @@ func roomServe(chPlayer chan rserve.Player) {
 			if isOk {
 				msgMapSend(playerStructToMap(player))
 			}
-			if player.MsgType == "ENTERROOM" || player.MsgType == "LEAVE" {
-				log.Println("player EnterRoom", rserve.Rooms[player.RID].EnterRoom)
-				msgMapSend(enterRoomStructToMap(rserve.Rooms[player.RID].EnterRoom))
+			if player.MsgType == "INITROOM" || player.MsgType == "LEAVE" {
+				log.Println("player InitRoom", rserve.Rooms[player.RID].InitRoom)
+				msgMapSend(initRoomStructToMap(rserve.Rooms[player.RID].InitRoom))
 			}
 
 			continue
@@ -168,12 +168,10 @@ func roomServe(chPlayer chan rserve.Player) {
 func roomMsgSendingProcess(rID int) {
 	switch rserve.Rooms[rID].RoomShare.Status {
 	case "START":
-		for i := 0; i < rserve.ROOM_PLAYERS_MAX; i++ {
-			if rserve.Rooms[rID].Players[i].Name != "UNKNOWN" && !rserve.Rooms[rID].Players[i].Discard {
-				<-time.After(time.Millisecond * 500)
-				msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[i]))
-			}
-		}
+		<-time.After(time.Millisecond * 600)
+		msgMapSend(initRoomStructToMap(rserve.Rooms[rID].InitRoom))
+		<-time.After(time.Millisecond * 600)
+		msgMapSend(sendCardsStructToMap(rserve.Rooms[rID].SendCards))
 
 	case "BETTING":
 		rserve.Rooms[rID] = rserve.PlayerRobotProcess(rserve.Rooms[rID])
@@ -240,6 +238,7 @@ func mapToStructPlayer(m map[string]interface{}) (rserve.Player, bool) {
 	return player, true
 }
 
+/*
 func mapToStructCards(m map[string]interface{}) (rserve.Cards, bool) {
 	var cards rserve.Cards
 
@@ -255,7 +254,7 @@ func mapToStructCards(m map[string]interface{}) (rserve.Cards, bool) {
 	}
 
 	return cards, true
-}
+} */
 
 func roomShareStructToMap(roomShare rserve.RoomShare) map[string]interface{} {
 	tempMap := make(map[string]interface{})
@@ -266,10 +265,10 @@ func roomShareStructToMap(roomShare rserve.RoomShare) map[string]interface{} {
 	return tempMap
 }
 
-func enterRoomStructToMap(enterRoom rserve.EnterRoom) map[string]interface{} {
+func initRoomStructToMap(initRoom rserve.InitRoom) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
-	temp, _ := json.Marshal(&enterRoom)
+	temp, _ := json.Marshal(&initRoom)
 	json.Unmarshal(temp, &tempMap)
 
 	return tempMap
@@ -284,13 +283,11 @@ func playerStructToMap(player rserve.Player) map[string]interface{} {
 	return tempMap
 }
 
-/*
-func cardsStructToMap(cards rserve.Cards) map[string]interface{} {
+func sendCardsStructToMap(sendCards rserve.SendCards) map[string]interface{} {
 	tempMap := make(map[string]interface{})
 
-	temp, _ := json.Marshal(&cards)
+	temp, _ := json.Marshal(&sendCards)
 	json.Unmarshal(temp, &tempMap)
 
 	return tempMap
 }
-*/

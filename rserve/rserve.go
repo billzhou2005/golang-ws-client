@@ -18,7 +18,8 @@ type Room struct {
 	RoomShare  RoomShare                     `json:"roomShare"`
 	Players    [ROOM_PLAYERS_MAX]Player      `json:"players"`
 	RoomsCards [ROOM_PLAYERS_MAX]util.Player `json:"roomCards"`
-	EnterRoom  EnterRoom                     `json:"enterRoom"`
+	SendCards  SendCards                     `json:"sendCards"`
+	InitRoom   InitRoom                      `json:"initRoom"`
 }
 
 type RoomShare struct {
@@ -36,32 +37,39 @@ type RoomShare struct {
 	Reserve     string `json:"reserve"`
 }
 
-type EnterRoom struct {
-	Type     string                   `json:"type"`
-	RID      int                      `json:"rID"`
-	Players  [ROOM_PLAYERS_MAX]string `json:"players"`
-	Balances [ROOM_PLAYERS_MAX]int    `json:"balances"`
-	Discards [ROOM_PLAYERS_MAX]bool   `json:"discards"`
+type InitRoom struct {
+	Type        string                   `json:"type"`
+	RID         int                      `json:"rID"`
+	Players     [ROOM_PLAYERS_MAX]string `json:"players"`
+	Balances    [ROOM_PLAYERS_MAX]int    `json:"balances"`
+	Discards    [ROOM_PLAYERS_MAX]bool   `json:"discards"`
+	TotalAmount int                      `json:"totalAmount"`
+}
+
+type SendCards struct {
+	Type       string                    `json:"type"`
+	RID        int                       `json:"rID"`
+	Points     [3 * ROOM_PLAYERS_MAX]int `json:"points"`
+	Suits      [3 * ROOM_PLAYERS_MAX]int `json:"suits"`
+	CardsTypes [ROOM_PLAYERS_MAX]string  `json:"cardsTypes"`
 }
 
 type Player struct {
-	Type      string       `json:"type"`
-	RID       int          `json:"rID"`
-	PID       string       `json:"pID"`
-	MsgType   string       `json:"msgType"`
-	Name      string       `json:"name"`
-	SeatID    int          `json:"seatID"`
-	SeatDID   int          `json:"seatDID"`
-	BetRound  int          `json:"betRound"`
-	Focus     bool         `json:"focus"`
-	CheckCard bool         `json:"checkCard"`
-	Discard   bool         `json:"discard"`
-	BetVol    int          `json:"betVol"`
-	Balance   int          `json:"balance"`
-	Robot     bool         `json:"robot"`
-	Cards     [3]util.Card `json:"cards"`
-	CardsType string       `json:"cardsType"`
-	Reserve   string       `json:"reserve"`
+	Type      string `json:"type"`
+	RID       int    `json:"rID"`
+	PID       string `json:"pID"`
+	MsgType   string `json:"msgType"`
+	Name      string `json:"name"`
+	SeatID    int    `json:"seatID"`
+	SeatDID   int    `json:"seatDID"`
+	BetRound  int    `json:"betRound"`
+	Focus     bool   `json:"focus"`
+	CheckCard bool   `json:"checkCard"`
+	Discard   bool   `json:"discard"`
+	BetVol    int    `json:"betVol"`
+	Balance   int    `json:"balance"`
+	Robot     bool   `json:"robot"`
+	Reserve   string `json:"reserve"`
 }
 
 type Cards struct {
@@ -101,6 +109,7 @@ func init() {
 
 func roomPlayersStartUpdate(room Room) Room {
 	room.RoomsCards = util.GetPlayersCards(50000012, ROOM_PLAYERS_MAX)
+	room.RoomShare.TotalAmount = 0
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if room.Players[i].Name != "UNKNOWN" {
 			if room.Players[i].Balance < room.RoomShare.BaseVol {
@@ -113,18 +122,23 @@ func roomPlayersStartUpdate(room Room) Room {
 				room.RoomShare.TotalAmount += room.RoomShare.BaseVol
 			}
 
-			room.Players[i].Discard = false
 			room.Players[i].Focus = false
 			room.Players[i].CheckCard = false
-			room.Players[i].Cards = room.RoomsCards[i].Cards
-			room.Players[i].CardsType = room.RoomsCards[i].Cardstype
+			room.Players[i].BetRound = 0
+			for j := 0; j < 3; j++ {
+				room.SendCards.Points[3*i+j] = room.RoomsCards[i].Cards[j].Points
+				room.SendCards.Suits[3*i+j] = room.RoomsCards[i].Cards[j].Suits
+			}
+			room.SendCards.CardsTypes[i] = room.RoomsCards[i].Cardstype
 		}
 	}
+	room.SendCards.RID = room.RoomShare.RID
+	room.SendCards.Type = "CARDS"
 
 	room.RoomShare.Status = "START"
+	room.RoomShare.BaseVol = 10000
 	room.RoomShare.BetRound = 0
 	room.RoomShare.CompareID = 100
-	room.RoomShare.TotalAmount = 0
 	room.RoomShare.LostSeat = 100
 	return room
 }
@@ -140,6 +154,7 @@ func RoomStatusUpdate(room Room) Room {
 	case "BETTING":
 		room = roomUpdateFocus(room, room.RoomShare.FocusID)
 		sumNotDiscard := roomSumNotDiscard(room)
+		room.RoomShare.GameRound++
 		if len(sumNotDiscard) == 1 {
 			room.RoomShare.Status = "SETTLE"
 		}
@@ -151,16 +166,16 @@ func RoomStatusUpdate(room Room) Room {
 			room.Players[sumNotDiscard[0]].Balance += room.RoomShare.TotalAmount
 			room.RoomShare.TotalAmount = 0
 			room.RoomShare.DefendSeat = sumNotDiscard[0]
+			room.RoomShare.GameRound = 0
 		} else {
 			room.RoomShare.Status = "WAITING"
-			room.RoomShare.GameRound++
 		}
 	default:
 		log.Println("Unknow Room Status", room.RoomShare.Status)
 		room.RoomShare.Status = "WAITING"
 	}
 
-	room = roomEnterRoomUpdate(room)
+	room = roomInitRoomUpdate(room)
 	return room
 }
 
@@ -173,6 +188,8 @@ func PlayerRobotProcess(room Room) Room {
 
 	nd := roomSumNotDiscard(room)
 	log.Println("roomSumNotDiscard", nd)
+
+	room.Players[focusID].BetVol = 0
 
 	log.Println("focusID:", focusID, "cardscore:", room.RoomsCards[focusID].Cardsscore)
 	switch room.RoomsCards[focusID].Cardsscore {
@@ -213,6 +230,8 @@ func PlayerRobotProcess(room Room) Room {
 	default:
 		log.Println("Invalid room.RoomsCards[focusID].Cardsscore")
 	}
+	room.RoomShare.TotalAmount += room.Players[focusID].BetVol
+	room.RoomShare.BaseVol = room.Players[focusID].BetVol
 	room.Players[focusID].BetRound++
 	return room
 }
@@ -353,17 +372,18 @@ func addAutoPlayers(room Room) Room {
 		}
 	}
 
-	room = roomEnterRoomUpdate(room)
+	room = roomInitRoomUpdate(room)
 	return room
 }
 
-func roomEnterRoomUpdate(room Room) Room {
-	room.EnterRoom.RID = room.RoomShare.RID
-	room.EnterRoom.Type = "ENTERROOM"
+func roomInitRoomUpdate(room Room) Room {
+	room.InitRoom.RID = room.RoomShare.RID
+	room.InitRoom.Type = "INITROOM"
+	room.InitRoom.TotalAmount = room.RoomShare.TotalAmount
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		room.EnterRoom.Players[i] = room.Players[i].Name
-		room.EnterRoom.Balances[i] = room.Players[i].Balance
-		room.EnterRoom.Discards[i] = room.Players[i].Discard
+		room.InitRoom.Players[i] = room.Players[i].Name
+		room.InitRoom.Balances[i] = room.Players[i].Balance
+		room.InitRoom.Discards[i] = room.Players[i].Discard
 	}
 	return room
 }
@@ -412,7 +432,7 @@ func deleteLeavePlayers(room Room, player Player) Room {
 	room.Players[seatID].Balance = 0
 	room.Players[seatID].Robot = false
 
-	room = roomEnterRoomUpdate(room)
+	room = roomInitRoomUpdate(room)
 	return room
 }
 
