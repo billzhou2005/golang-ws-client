@@ -43,6 +43,7 @@ type InitRoom struct {
 	RID         int                      `json:"rID"`
 	Players     [ROOM_PLAYERS_MAX]string `json:"players"`
 	Balances    [ROOM_PLAYERS_MAX]int    `json:"balances"`
+	HasCards    [ROOM_PLAYERS_MAX]bool   `json:"hasCards"`
 	Discards    [ROOM_PLAYERS_MAX]bool   `json:"discards"`
 	TotalAmount int                      `json:"totalAmount"`
 }
@@ -65,7 +66,7 @@ type Player struct {
 	SeatDID   int     `json:"seatDID"`
 	BetRound  int     `json:"betRound"`
 	Focus     bool    `json:"focus"`
-	CheckCard bool    `json:"checkCard"`
+	HasCard   bool    `json:"hasCard"`
 	Discard   bool    `json:"discard"`
 	BetVol    int     `json:"betVol"`
 	Balance   int     `json:"balance"`
@@ -93,7 +94,7 @@ func init() {
 		Rooms[i].RoomShare.FocusID = 0
 		Rooms[i].RoomShare.CompareID = 100
 		Rooms[i].RoomShare.MinVol = 10000
-		Rooms[i].RoomShare.MaxVol = 100000
+		Rooms[i].RoomShare.MaxVol = 200000
 		Rooms[i].RoomShare.DefendSeat = 0
 		Rooms[i].RoomShare.Reserve = "TBD"
 		for j := 0; j < ROOM_PLAYERS_MAX; j++ {
@@ -112,7 +113,7 @@ func roomPlayersStartUpdate(room Room) Room {
 
 	room.RoomShare.Status = "START"
 	room.RoomShare.MinVol = 10000
-	room.RoomShare.MaxVol = 100000
+	room.RoomShare.MaxVol = 200000
 	room.RoomShare.TotalAmount = 0
 	room.RoomShare.BetRound = 0
 	room.RoomShare.CompareID = 100
@@ -121,17 +122,18 @@ func roomPlayersStartUpdate(room Room) Room {
 		if room.Players[i].Name != "UNKNOWN" {
 			if room.Players[i].Balance < room.RoomShare.MinVol {
 				room.Players[i].MsgType = "UNDERFUNDED"
+				room.Players[i].HasCard = false
 				room.Players[i].Discard = true
 				room = deleteLeavePlayers(room, room.Players[i])
 			} else {
 				room.Players[i].MsgType = "START"
+				room.Players[i].HasCard = true
 				room.Players[i].Discard = false
 				room.Players[i].Balance -= room.RoomShare.MinVol
 				room.RoomShare.TotalAmount += room.RoomShare.MinVol
 			}
 
 			room.Players[i].Focus = false
-			room.Players[i].CheckCard = false
 			room.Players[i].Allin = false
 			room.Players[i].BetRound = 0
 			for j := 0; j < 3; j++ {
@@ -266,10 +268,12 @@ func PlayerRobotProcess(room Room) Room {
 		_, room = playerCompareRequest(focusID, room)
 	case 1:
 		room.Players[focusID].Discard = true
+		room.Players[focusID].HasCard = false
 		room.Players[focusID].BetVol = 0
 		room.Players[focusID].MsgType = "LOST"
 	case 0:
 		room.Players[focusID].Discard = true
+		room.Players[focusID].HasCard = false
 		room.Players[focusID].BetVol = 0
 		room.Players[focusID].MsgType = "LOST"
 	default:
@@ -313,11 +317,13 @@ func playerCompareRequest(requestID int, room Room) (bool, Room) {
 
 	if room.RoomsCards[requestID].Cardsscore > room.RoomsCards[compareID].Cardsscore {
 		room.Players[compareID].Discard = true
+		room.Players[compareID].HasCard = false
 		room.Players[compareID].MsgType = "LOST"
 		room.Players[requestID].MsgType = "COMPARED"
 		log.Println("LOST Player:", room.Players[compareID].Name)
 	} else {
 		room.Players[requestID].Discard = true
+		room.Players[requestID].HasCard = false
 		room.Players[requestID].MsgType = "LOST"
 		room.Players[compareID].MsgType = "COMPARED"
 		log.Println("LOST Player:", room.Players[requestID].Name)
@@ -377,6 +383,11 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 		if isOk {
 			player.SeatID = seatID
 			player.MsgType = "ASSIGNED"
+			player.Robot = false
+			player.HasCard = false
+			player.Discard = true
+			player.Focus = false
+			player.Allin = false
 			Rooms[player.RID].Players[seatID] = player
 			log.Println("login user assigned seat-Sucess")
 			return true, player
@@ -406,7 +417,7 @@ func addAutoPlayers(room Room) Room {
 	}
 
 	if numofp == 0 {
-		for j := 0; j < 6; j++ {
+		for j := 0; j < 4; j++ {
 			room.Players[j].Type = "PLAYER"
 			room.Players[j].RID = room.RoomShare.RID
 			room.Players[j].PID = "xxxaaa88"
@@ -414,7 +425,7 @@ func addAutoPlayers(room Room) Room {
 			room.Players[j].Name = nickName[randomNums[j]]
 			room.Players[j].SeatID = j
 			room.Players[j].Focus = false
-			room.Players[j].CheckCard = false
+			room.Players[j].HasCard = false
 			room.Players[j].Discard = true
 			room.Players[j].BetVol = 0
 			room.Players[j].Balance = 500000 + randomNums[j]*100000 // add random balance for auto user
@@ -434,6 +445,7 @@ func roomInitRoomUpdate(room Room) Room {
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		room.InitRoom.Players[i] = room.Players[i].Name
 		room.InitRoom.Balances[i] = room.Players[i].Balance
+		room.InitRoom.HasCards[i] = room.Players[i].HasCard
 		room.InitRoom.Discards[i] = room.Players[i].Discard
 	}
 	return room
@@ -478,7 +490,7 @@ func deleteLeavePlayers(room Room, player Player) Room {
 	room.Players[seatID].SeatDID = 100
 	room.Players[seatID].Focus = false
 	room.Players[seatID].Discard = true
-	room.Players[seatID].CheckCard = false
+	room.Players[seatID].HasCard = false
 	room.Players[seatID].BetVol = 0
 	room.Players[seatID].Balance = 0
 	room.Players[seatID].Robot = false
