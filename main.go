@@ -138,7 +138,9 @@ func roomServe(chPlayer chan rserve.Player) {
 			log.Println("roomServe", player)
 			isOk, player := rserve.PlayerInfoProcess(player)
 			if isOk {
+				<-time.After(time.Millisecond * 20)
 				msgMapSend(playerStructToMap(player))
+				t[player.RID].Reset(1 * time.Second)
 			}
 			if player.MsgType == "INITROOM" || player.MsgType == "LEAVE" {
 				log.Println("player InitRoom", rserve.Rooms[player.RID].InitRoom)

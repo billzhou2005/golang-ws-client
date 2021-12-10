@@ -67,6 +67,7 @@ type Player struct {
 	BetRound  int     `json:"betRound"`
 	Focus     bool    `json:"focus"`
 	HasCard   bool    `json:"hasCard"`
+	ShowCard  bool    `json:"showCard"`
 	Discard   bool    `json:"discard"`
 	BetVol    int     `json:"betVol"`
 	Balance   int     `json:"balance"`
@@ -207,17 +208,15 @@ func betVol(betVol int, max int, balance int) (int, bool) {
 func PlayerRobotProcess(room Room) Room {
 	allin := false
 	focusID := room.RoomShare.FocusID
-	room.Players[focusID].MsgType = "BETTING"
 	if !room.Players[focusID].Robot {
+		log.Println("Not robost focusID:", focusID, room.Players[focusID])
 		return room
 	}
 
-	nd := roomSumNotDiscard(room)
-	log.Println("roomSumNotDiscard", nd)
+	// nd := roomSumNotDiscard(room)
+	// log.Println("roomSumNotDiscard", nd)
+	room.Players[focusID].MsgType = "BETTED"
 
-	room.Players[focusID].BetVol = 0
-
-	log.Println("focusID:", focusID, "cardscore:", room.RoomsCards[focusID].Cardsscore)
 	switch room.RoomsCards[focusID].Cardsscore {
 	case 8:
 		room.Players[focusID].BetVol = 3 * room.RoomShare.MinVol
@@ -333,6 +332,7 @@ func playerCompareRequest(requestID int, room Room) (bool, Room) {
 	return true, room
 }
 
+/*
 func roomSumRobostsNotDiscard(room Room) (seatIDs []int) {
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if room.Players[i].Robot && !room.Players[i].Discard {
@@ -340,7 +340,7 @@ func roomSumRobostsNotDiscard(room Room) (seatIDs []int) {
 		}
 	}
 	return seatIDs
-}
+} */
 
 func roomSumNotDiscard(room Room) (seatIDs []int) {
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
@@ -378,6 +378,17 @@ func roomUpdateFocus(room Room, focus int) Room {
 
 func PlayerInfoProcess(player Player) (bool, Player) {
 	switch player.MsgType {
+	case "BETTING":
+		if !player.Robot {
+			player.Balance -= player.BetVol
+			Rooms[player.RID].RoomShare.TotalAmount += player.BetVol
+			player.MsgType = "BETTED"
+			log.Println("login user BETTED", player.Name)
+			return true, player
+		} else {
+			log.Println("Robot BETTED", player.Name)
+			return false, player
+		}
 	case "JOIN":
 		isOk, seatID := assignSeatID(player)
 		if isOk {
