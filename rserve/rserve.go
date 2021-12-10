@@ -208,6 +208,7 @@ func betVol(betVol int, max int, balance int) (int, bool) {
 func PlayerRobotProcess(room Room) Room {
 	allin := false
 	focusID := room.RoomShare.FocusID
+	room.Players[focusID].MsgType = "BETTING"
 	if !room.Players[focusID].Robot {
 		log.Println("Not robost focusID:", focusID, room.Players[focusID])
 		return room
@@ -377,41 +378,49 @@ func roomUpdateFocus(room Room, focus int) Room {
 }
 
 func PlayerInfoProcess(player Player) (bool, Player) {
+	if player.Robot {
+		log.Println("Robot Ignored in PlayerInfoProcess")
+		return false, player
+	}
 	switch player.MsgType {
-	case "BETTING":
-		if !player.Robot {
-			player.Balance -= player.BetVol
-			Rooms[player.RID].RoomShare.TotalAmount += player.BetVol
-			player.MsgType = "BETTED"
-			log.Println("login user BETTED", player.Name)
-			return true, player
-		} else {
-			log.Println("Robot BETTED", player.Name)
-			return false, player
-		}
+	case "BETTED":
+		player.Balance -= player.BetVol
+		Rooms[player.RID].RoomShare.TotalAmount += player.BetVol
+		player.MsgType = "WAITING"
+	case "FOLLOW":
+		Rooms[player.RID].RoomShare.TotalAmount += Rooms[player.RID].RoomShare.MinVol
+		player.Balance -= Rooms[player.RID].RoomShare.MinVol
+		player.MsgType = "WAITING"
+	case "DISCARD":
+		player.Discard = true
+		player.HasCard = false
+		Rooms[player.RID].RoomShare.TotalAmount += 0
+		player.MsgType = "WAITING"
 	case "JOIN":
 		isOk, seatID := assignSeatID(player)
-		if isOk {
-			player.SeatID = seatID
-			player.MsgType = "ASSIGNED"
-			player.Robot = false
-			player.HasCard = false
-			player.Discard = true
-			player.Focus = false
-			player.Allin = false
-			Rooms[player.RID].Players[seatID] = player
-			log.Println("login user assigned seat-Sucess")
-			return true, player
+		if !isOk {
+			log.Println("Player Assign Failed!")
+			return false, player
 		}
-		log.Println(Rooms[player.RID])
+		player.SeatID = seatID
+		player.MsgType = "ASSIGNED"
+		player.Robot = false
+		player.HasCard = false
+		player.Discard = true
+		player.Focus = false
+		player.Allin = false
 	case "LEAVE":
 		Rooms[player.RID] = deleteLeavePlayers(Rooms[player.RID], player)
+		log.Println("Player deleted!")
+		return false, player
 	default:
-		log.Println("player.MsgType", player.MsgType)
+		log.Println("Player info not sending:", player.MsgType)
+		return false, player
 
 	}
 
-	return false, player
+	Rooms[player.RID].Players[player.SeatID] = player
+	return true, player
 }
 
 func addAutoPlayers(room Room) Room {

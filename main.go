@@ -135,7 +135,7 @@ func roomServe(chPlayer chan rserve.Player) {
 		select {
 		case player := <-chPlayer:
 
-			log.Println("roomServe", player)
+			log.Println("Player Info Received:", player)
 			isOk, player := rserve.PlayerInfoProcess(player)
 			if isOk {
 				<-time.After(time.Millisecond * 20)
