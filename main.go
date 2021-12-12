@@ -104,13 +104,13 @@ func receiveJsonHandler(connection *websocket.Conn) {
 				log.Println("Received Player Struct error")
 			}
 		case "ROOM":
-			room, isOk := mapToStructRoomMsg(rcvMsg)
-			log.Println("RoomShare Sent:", isOk, room)
+			//room, isOk := mapToStructRoomMsg(rcvMsg)
+			//log.Println("RoomShare Sent:", isOk, room)
 		case "CARDS":
 			// cards, isOk := mapToStructCards(rcvMsg)
-			log.Println("CARDS Sent", rcvMsg)
+			//log.Println("CARDS Sent", rcvMsg)
 		case "INITROOM":
-			log.Println("InitRoom data Sent:", rcvMsg)
+			//log.Println("InitRoom data Sent:", rcvMsg)
 		default:
 			log.Println("Not room/player/cards json", rcvMsg)
 		}
@@ -123,9 +123,45 @@ func receiveJsonHandler(connection *websocket.Conn) {
 	}
 }
 
+func playerMsgSendingProcess(sengding bool, player rserve.Player) {
+	if !sengding {
+		log.Println("Not sending in playerMsgSendingProcess:", player.Name, player.MsgType)
+		return
+	}
+
+	log.Println("Sending in playerMsgSendingProcess:", player.Name, player.MsgType)
+
+	switch player.MsgType {
+	case "INITROOM":
+		msgMapSend(initRoomStructToMap(rserve.Rooms[player.RID].InitRoom))
+	case "UPDATED":
+		<-time.After(time.Microsecond * 300)
+		msgMapSend(playerStructToMap(player))
+	case "WAITING":
+		<-time.After(time.Microsecond * 300)
+		msgMapSend(playerStructToMap(player))
+	case "ASSIGNED":
+		<-time.After(time.Microsecond * 300)
+		msgMapSend(initRoomStructToMap(rserve.Rooms[player.RID].InitRoom))
+	case "COMPARED":
+		<-time.After(time.Microsecond * 300)
+		msgMapSend(playerStructToMap(player))
+	case "LOST":
+		<-time.After(time.Microsecond * 300)
+		msgMapSend(playerStructToMap(player))
+	case "LEFT":
+		<-time.After(time.Microsecond * 300)
+		msgMapSend(initRoomStructToMap(rserve.Rooms[player.RID].InitRoom))
+	case "IGNORED":
+		log.Println("No info seding in playerMsgSendingProcess:", player.Name, player.MsgType)
+	default:
+		log.Println("No info seding in playerMsgSendingProcess:", player.Name, player.MsgType)
+	}
+}
+
 func roomServe(chPlayer chan rserve.Player) {
 	var t [rserve.VOL_ROOM_MAX]*time.Timer
-	delay := 6 * time.Second
+	delay := 10 * time.Second
 
 	for i := 0; i < rserve.VOL_ROOM_MAX; i++ {
 		t[i] = time.NewTimer(delay)
@@ -134,17 +170,10 @@ func roomServe(chPlayer chan rserve.Player) {
 	for {
 		select {
 		case player := <-chPlayer:
-
-			log.Println("Player Info Received:", player)
-			isOk, player := rserve.PlayerInfoProcess(player)
-			if isOk {
-				<-time.After(time.Millisecond * 20)
-				msgMapSend(playerStructToMap(player))
-				t[player.RID].Reset(1 * time.Second)
-			}
-			if player.MsgType == "INITROOM" || player.MsgType == "LEAVE" {
-				log.Println("player InitRoom", rserve.Rooms[player.RID].InitRoom)
-				msgMapSend(initRoomStructToMap(rserve.Rooms[player.RID].InitRoom))
+			sending, player := rserve.PlayerInfoProcess(player)
+			playerMsgSendingProcess(sending, player)
+			if sending {
+				t[player.RID].Reset(400 * time.Microsecond)
 			}
 
 			continue
@@ -154,10 +183,12 @@ func roomServe(chPlayer chan rserve.Player) {
 			log.Println("T0-room.RoomShare", rserve.Rooms[rID].RoomShare)
 			msgMapSend(roomShareStructToMap(rserve.Rooms[rID].RoomShare))
 
-			roomMsgSendingProcess(rID)
-
-			log.Println("T0 message, interval:", delay)
-			t[rID].Reset(delay)
+			robot := roomMsgSendingProcess(rID)
+			if robot {
+				t[rID].Reset(800 * time.Microsecond)
+			} else {
+				t[rID].Reset(delay)
+			}
 		case <-t[1].C:
 			log.Println("T1 message, interval:", delay)
 			// t[1].Reset(delay)
@@ -168,34 +199,41 @@ func roomServe(chPlayer chan rserve.Player) {
 	}
 }
 
-func roomMsgSendingProcess(rID int) {
+func roomMsgSendingProcess(rID int) bool {
+	robot := false
 	switch rserve.Rooms[rID].RoomShare.Status {
+	case "WAITING":
+		robot = true
 	case "START":
-		<-time.After(time.Millisecond * 600)
+		<-time.After(time.Microsecond * 600)
 		msgMapSend(initRoomStructToMap(rserve.Rooms[rID].InitRoom))
-		<-time.After(time.Millisecond * 600)
+		<-time.After(time.Microsecond * 600)
 		msgMapSend(sendCardsStructToMap(rserve.Rooms[rID].SendCards))
+		robot = true
 
 	case "BETTING":
 		rserve.Rooms[rID] = rserve.PlayerRobotProcess(rserve.Rooms[rID])
 		log.Println("FocusID, CompareID", rserve.Rooms[rID].RoomShare.CompareID, rserve.Rooms[rID].RoomShare.FocusID)
 		if rserve.Rooms[rID].RoomShare.CompareID < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 600)
+			<-time.After(time.Microsecond * 600)
 			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.CompareID]))
 			rserve.Rooms[rID].RoomShare.CompareID = 100 // reset
 		}
-		if rserve.Rooms[rID].RoomShare.FocusID < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 600)
+		if rserve.Rooms[rID].RoomShare.FocusID < rserve.ROOM_PLAYERS_MAX && rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.FocusID].Robot {
+			<-time.After(time.Second * 2)
 			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.FocusID]))
+			robot = true
 		}
 	case "SETTLE":
 		if rserve.Rooms[rID].RoomShare.DefendSeat < rserve.ROOM_PLAYERS_MAX {
-			<-time.After(time.Millisecond * 800)
+			<-time.After(time.Microsecond * 800)
 			msgMapSend(playerStructToMap(rserve.Rooms[rID].Players[rserve.Rooms[rID].RoomShare.DefendSeat]))
 		}
+		robot = true
 	default:
 		log.Println("No message sending", rserve.Rooms[rID].RoomShare.Status)
 	}
+	return robot
 }
 
 func msgMapSend(msgMap map[string]interface{}) {
@@ -207,6 +245,7 @@ func msgMapSend(msgMap map[string]interface{}) {
 	sendChan <- sendMap
 }
 
+/*
 func mapToStructRoomMsg(m map[string]interface{}) (rserve.RoomShare, bool) {
 	var room rserve.RoomShare
 
@@ -222,7 +261,7 @@ func mapToStructRoomMsg(m map[string]interface{}) (rserve.RoomShare, bool) {
 	}
 
 	return room, true
-}
+}*/
 
 func mapToStructPlayer(m map[string]interface{}) (rserve.Player, bool) {
 	var player rserve.Player

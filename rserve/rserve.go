@@ -210,7 +210,7 @@ func PlayerRobotProcess(room Room) Room {
 	focusID := room.RoomShare.FocusID
 	room.Players[focusID].MsgType = "BETTING"
 	if !room.Players[focusID].Robot {
-		log.Println("Not robost focusID:", focusID, room.Players[focusID])
+		// log.Println("Not robost focusID:", focusID, room.Players[focusID])
 		return room
 	}
 
@@ -284,8 +284,8 @@ func PlayerRobotProcess(room Room) Room {
 		room.RoomShare.MinVol = room.Players[focusID].BetVol
 	}
 
-	log.Println("room.Players[focusID].BetVol", room.Players[focusID].BetVol)
-	log.Println("room.RoomShare.TotalAmount", room.RoomShare.TotalAmount)
+	// log.Println("room.Players[focusID].BetVol", room.Players[focusID].BetVol)
+	// log.Println("room.RoomShare.TotalAmount", room.RoomShare.TotalAmount)
 	room.Players[focusID].Allin = allin
 	room.Players[focusID].BetRound++
 	return room
@@ -378,49 +378,91 @@ func roomUpdateFocus(room Room, focus int) Room {
 }
 
 func PlayerInfoProcess(player Player) (bool, Player) {
+	sending := false
 	if player.Robot {
-		log.Println("Robot Ignored in PlayerInfoProcess")
-		return false, player
+		player.MsgType = "IGNORED"
+		return sending, player
 	}
+
+	log.Println("PlayerMsg processing:", player.Name, player.MsgType)
+
+	room := Rooms[player.RID]
 	switch player.MsgType {
-	case "BETTED":
+	case "BCONFIRM":
 		player.Balance -= player.BetVol
-		Rooms[player.RID].RoomShare.TotalAmount += player.BetVol
-		player.MsgType = "WAITING"
+		room.RoomShare.TotalAmount += player.BetVol
+		player.MsgType = "UPDATED"
+		player.Focus = false
+		room.Players[player.SeatID] = player
+		Rooms[player.RID] = room
+		sending = true
 	case "FOLLOW":
-		Rooms[player.RID].RoomShare.TotalAmount += Rooms[player.RID].RoomShare.MinVol
-		player.Balance -= Rooms[player.RID].RoomShare.MinVol
-		player.MsgType = "WAITING"
+		room.RoomShare.TotalAmount += room.RoomShare.MinVol
+		player.Balance -= room.RoomShare.MinVol
+		player.MsgType = "UPDATED"
+		player.Focus = false
+		room.Players[player.SeatID] = player
+		Rooms[player.RID] = room
+		sending = true
+	case "COMPARING":
+		player.Balance -= player.BetVol
+		room.RoomShare.TotalAmount += player.BetVol
+		room.Players[player.SeatID] = player
+		_, room = playerCompareRequest(player.SeatID, room)
+		player = room.Players[player.SeatID]
+		Rooms[player.RID] = room
+		sending = true
 	case "DISCARD":
 		player.Discard = true
 		player.HasCard = false
-		Rooms[player.RID].RoomShare.TotalAmount += 0
+		player.Focus = false
+		room.RoomShare.TotalAmount += 0
 		player.MsgType = "WAITING"
+		room.Players[player.SeatID] = player
+		Rooms[player.RID] = room
+		sending = true
+	case "TIMEOUT":
+		player.Discard = true
+		player.HasCard = false
+		player.Focus = false
+		room.RoomShare.TotalAmount += 0
+		player.MsgType = "WAITING"
+		room.Players[player.SeatID] = player
+		Rooms[player.RID] = room
+		sending = true
 	case "JOIN":
 		isOk, seatID := assignSeatID(player)
-		if !isOk {
-			log.Println("Player Assign Failed!")
-			return false, player
+		if isOk {
+			player.SeatID = seatID
+			player.MsgType = "ASSIGNED"
+			player.Robot = false
+			player.HasCard = false
+			player.Discard = true
+			player.Focus = false
+			player.Allin = false
+			room.InitRoom.Players[seatID] = player.Name
+			room.InitRoom.Balances[seatID] = player.Balance
+			room.InitRoom.HasCards[seatID] = player.HasCard
+			room.Players[player.SeatID] = player
+			Rooms[player.RID] = room
+		} else {
+			player.MsgType = "ASSIGNFAILED"
 		}
-		player.SeatID = seatID
-		player.MsgType = "ASSIGNED"
-		player.Robot = false
-		player.HasCard = false
-		player.Discard = true
-		player.Focus = false
-		player.Allin = false
-	case "LEAVE":
-		Rooms[player.RID] = deleteLeavePlayers(Rooms[player.RID], player)
-		log.Println("Player deleted!")
-		return false, player
-	default:
-		log.Println("Player info not sending:", player.MsgType)
-		return false, player
+		sending = true
 
+	case "LEAVE":
+		room = deleteLeavePlayers(room, player)
+		Rooms[player.RID] = room
+		player.MsgType = "LEFT"
+		sending = true
+	case "INITROOM":
+		sending = true
+	default:
+		sending = false
+		log.Println("Not processing in default of PlayerInfoProcess:", player.Name, player.MsgType)
 	}
 
-	Rooms[player.RID].Players[player.SeatID] = player
-	return true, player
+	return sending, player
 }
 
 func addAutoPlayers(room Room) Room {
@@ -437,7 +479,7 @@ func addAutoPlayers(room Room) Room {
 	}
 
 	if numofp == 0 {
-		for j := 0; j < 4; j++ {
+		for j := 0; j < 5; j++ {
 			room.Players[j].Type = "PLAYER"
 			room.Players[j].RID = room.RoomShare.RID
 			room.Players[j].PID = "xxxaaa88"
@@ -448,7 +490,7 @@ func addAutoPlayers(room Room) Room {
 			room.Players[j].HasCard = false
 			room.Players[j].Discard = true
 			room.Players[j].BetVol = 0
-			room.Players[j].Balance = 500000 + randomNums[j]*100000 // add random balance for auto user
+			room.Players[j].Balance = 1500000 + randomNums[j]*100000 // add random balance for auto user
 			room.Players[j].Robot = true
 			room.Players[j].Reserve = "TBD"
 		}
