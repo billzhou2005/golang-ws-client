@@ -366,7 +366,7 @@ func roomUpdateFocus(room Room, focus int) Room {
 		if focus >= ROOM_PLAYERS_MAX {
 			focus = 0
 		}
-		if room.Players[focus].Name != "UNKNOWN" && !room.Players[focus].Discard {
+		if room.Players[focus].Name != "UNKNOWN" && room.Players[focus].HasCard {
 			room.Players[focus].Focus = true
 			room.Players[focus].BetRound++
 			room.RoomShare.FocusID = focus
@@ -388,7 +388,7 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 
 	room := Rooms[player.RID]
 	switch player.MsgType {
-	case "BCONFIRM":
+	case "BCONFIRMING":
 		player.Balance -= player.BetVol
 		room.RoomShare.TotalAmount += player.BetVol
 		player.MsgType = "UPDATED"
@@ -396,7 +396,7 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 		room.Players[player.SeatID] = player
 		Rooms[player.RID] = room
 		sending = true
-	case "FOLLOW":
+	case "FOLLOWING":
 		room.RoomShare.TotalAmount += room.RoomShare.MinVol
 		player.Balance -= room.RoomShare.MinVol
 		player.MsgType = "UPDATED"
@@ -412,7 +412,7 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 		player = room.Players[player.SeatID]
 		Rooms[player.RID] = room
 		sending = true
-	case "DISCARD":
+	case "DISCARDING":
 		player.Discard = true
 		player.HasCard = false
 		player.Focus = false
@@ -430,7 +430,7 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 		room.Players[player.SeatID] = player
 		Rooms[player.RID] = room
 		sending = true
-	case "JOIN":
+	case "JOINING":
 		isOk, seatID := assignSeatID(player)
 		if isOk {
 			player.SeatID = seatID
@@ -443,14 +443,16 @@ func PlayerInfoProcess(player Player) (bool, Player) {
 			room.InitRoom.Players[seatID] = player.Name
 			room.InitRoom.Balances[seatID] = player.Balance
 			room.InitRoom.HasCards[seatID] = player.HasCard
-			room.Players[player.SeatID] = player
+			room.InitRoom.Discards[seatID] = player.Discard
+			room.Players[seatID] = player
 			Rooms[player.RID] = room
+			sending = true
 		} else {
 			player.MsgType = "ASSIGNFAILED"
+			sending = false
 		}
-		sending = true
 
-	case "LEAVE":
+	case "LEAVING":
 		room = deleteLeavePlayers(room, player)
 		Rooms[player.RID] = room
 		player.MsgType = "LEFT"
@@ -564,19 +566,18 @@ func deleteLeavePlayers(room Room, player Player) Room {
 func assignSeatID(player Player) (bool, int) {
 	seatID := 100
 
-	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
-		if Rooms[player.RID].Players[i].Name == "UNKNOWN" {
-			seatID = i
-			break
-		}
-	}
-
 	// check re-assigned or not
 	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
 		if Rooms[player.RID].Players[i].Name == player.Name {
 			seatID = 100
 			log.Println("Assgin SeatID failed, duplicated user:", player.Name)
 			return false, seatID
+		}
+	}
+	for i := 0; i < ROOM_PLAYERS_MAX; i++ {
+		if Rooms[player.RID].Players[i].Name == "UNKNOWN" {
+			seatID = i
+			break
 		}
 	}
 
